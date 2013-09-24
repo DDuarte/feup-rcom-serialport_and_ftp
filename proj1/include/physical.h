@@ -13,7 +13,7 @@ typedef struct
 
 phy_connection phy_open(const char* term);
 ssize_t phy_write(const phy_connection* conn, const char* message, size_t size);
-ssize_t phy_read(const phy_connection* conn, char** message, size_t max_size);
+ssize_t phy_read(const phy_connection* conn, char* message, size_t max_size);
 bool phy_close(phy_connection* conn);
 
 
