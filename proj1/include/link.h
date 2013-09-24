@@ -17,43 +17,43 @@
 
 typedef enum
 {
-	ADDR_R_T = 0x03, // receiver to transmitter
-	ADDR_T_R = 0x01  // transmitter to receiver
+    ADDR_R_T = 0x03, // receiver to transmitter
+    ADDR_T_R = 0x01  // transmitter to receiver
 } ll_address;
 
 typedef enum
 {
-	FRAME_INFO,
-	FRAME_SUPER,
-	FRAME_NOT_NUMERED
+    FRAME_INFO,
+    FRAME_SUPER,
+    FRAME_NOT_NUMERED
 } ll_frame_type;
 
 
 typedef enum
 {
-	TRANSMITTER,
-	RECEIVER
+    TRANSMITTER,
+    RECEIVER
 } ll_status;
 
 typedef enum
 {
-	CNTRL_SET 	=	0x3,
-	CNTRL_DISC	= 	0xB,
-	CNTRL_UA 	=	0x7,
-	CNTRL_RR	=	0x5,
-	CNTRL_REJ 	=	0x1
+    CNTRL_SET     =    0x3,
+    CNTRL_DISC    =     0xB,
+    CNTRL_UA     =    0x7,
+    CNTRL_RR    =    0x5,
+    CNTRL_REJ     =    0x1
 } ll_cntrl;
 
 typedef struct
 {
-	phy_connection connection;
-	ll_status stat;
+    phy_connection connection;
+    ll_status stat;
 
-	unsigned int sequence_number;
-	unsigned int timeout;
-	unsigned int number_transmissions;
+    unsigned int sequence_number;
+    unsigned int timeout;
+    unsigned int number_transmissions;
 
-	char frame[MAX_FRAME_SIZE];
+    char frame[MAX_FRAME_SIZE];
 } link_layer;
 
 link_layer ll_open(const char* term, ll_status stat);

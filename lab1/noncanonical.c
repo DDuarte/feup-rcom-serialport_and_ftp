@@ -37,8 +37,8 @@ int main(int argc, char** argv)
     if (fd <0) {perror(argv[1]); exit(-1); }
 
     if (tcgetattr(fd,&oldtio) != 0) { /* save current port settings */
-	printf("tcgetattr oldtio failed");
-	exit(-1);
+    printf("tcgetattr oldtio failed");
+    exit(-1);
     }
 
     bzero(&newtio, sizeof(newtio));
@@ -54,8 +54,8 @@ int main(int argc, char** argv)
 
     tcflush(fd, TCIFLUSH);
     if (tcsetattr(fd,TCSANOW,&newtio) != 0) {
-	printf("tcgetattr newtio failed");
-	exit(-1);
+    printf("tcgetattr newtio failed");
+    exit(-1);
     }
 
     printf("New termios structure set\n");
@@ -64,7 +64,7 @@ int main(int argc, char** argv)
       res = read(fd,buf,255);   /* returns after 1 chars have been input */
       buf[res]=0;               /* so we can printf... */
       printf("%s", buf);
-	if (errno != EAGAIN) printf("\n");
+    if (errno != EAGAIN) printf("\n");
       //for (j=0;j<strlen(buf);++j) printf("0x%X\n", buf[j]);
       if (buf[0]=='z') STOP=TRUE;
       memset(buf, 0, 255);

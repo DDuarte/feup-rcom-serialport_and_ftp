@@ -7,8 +7,8 @@
 
 typedef struct
 {
-	int fd;
-	struct termios term;
+    int fd;
+    struct termios term;
 } phy_connection;
 
 phy_connection phy_open(const char* term);

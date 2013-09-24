@@ -24,8 +24,8 @@ int main(int argc, char** argv)
     int i;
     
     if ( (argc < 2) || 
-  	     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
-  	      (strcmp("/dev/ttyS1", argv[1])!=0) )) {
+           ((strcmp("/dev/ttyS0", argv[1])!=0) && 
+            (strcmp("/dev/ttyS1", argv[1])!=0) )) {
       printf("Usage:\tserial SerialPort\n\tex: serial /dev/ttyS1\n");
       exit(1);
     }

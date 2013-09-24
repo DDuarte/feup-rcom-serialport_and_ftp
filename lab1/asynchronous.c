@@ -27,9 +27,9 @@ int main(int argc, char** argv)
     int i;
 
     //Uses either COM1 or COM2     
-  	if ( (argc < 2) || 
-  	     ((strcmp("/dev/ttyS0", argv[1])!=0) && 
-  	      (strcmp("/dev/ttyS1", argv[1])!=0) )) {
+      if ( (argc < 2) || 
+           ((strcmp("/dev/ttyS0", argv[1])!=0) && 
+            (strcmp("/dev/ttyS1", argv[1])!=0) )) {
       printf("Usage:\tasync_read SerialPort\n\tex: async_read /dev/ttyS1\n");
       exit(1);
     }
