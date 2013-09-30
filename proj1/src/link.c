@@ -2,6 +2,12 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+static size_t _ll_byte_stuff(char** message, size_t size);
+static size_t _ll_byte_destuff(char** message, size_t size);
 
 link_layer ll_open(const char* term, ll_status stat)
 {
@@ -27,11 +33,71 @@ ssize_t ll_write(link_layer* conn, const char* message, size_t size)
     return -1;
 }
 
-ssize_t ll_read(link_layer* conn, char** message)
+bool ll_send_command(link_layer* conn, ll_cntrl command, int n)
 {
+    char* cmd;
+    size_t bytesWritten;
+    size_t messageSize = LL_CMD_SIZE;
+
     assert(conn);
 
-    return -1;
+    cmd = compose_command(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T, command, n);
+
+    messageSize = _ll_byte_stuff(&cmd, messageSize);
+
+    bytesWritten = phy_write(&conn->connection, cmd, messageSize);
+
+    // TODO: Timeout -- Temporary Solution: sleep
+
+    sleep(1);
+
+    if (bytesWritten != LL_CMD_SIZE)
+        perror("Error sending command");
+
+    free(cmd);
+
+    return bytesWritten == LL_CMD_SIZE;
+}
+
+#define BUFFER_SIZE 255
+
+ssize_t ll_read(link_layer* conn, char** message)
+{
+    size_t size = 0;
+    ssize_t readRet;
+    char c;
+    char buffer[BUFFER_SIZE];
+
+    assert(conn);
+
+    do
+    {
+        readRet = phy_read(&conn->connection, &c, 1);
+    } while(readRet == 1 && c != LL_FLAG);
+
+    if (readRet != 1) return -1;
+
+    *message = (char*) malloc(BUFFER_SIZE * sizeof(char));
+
+    (*message)[0] = LL_FLAG;
+    size = 1;
+
+    do
+    {
+        readRet = phy_read(&conn->connection, &c, 1);
+        (*message)[size] = c;
+        size++;
+
+        if (readRet == 1 && c != LL_FLAG && size % BUFFER_SIZE == 0)
+        {
+            int mult = size / BUFFER_SIZE + 1;
+            *message = (char*) realloc(*message, mult * BUFFER_SIZE);
+        }
+    } while (readRet == 1 && c != LL_FLAG);
+
+    size = _ll_byte_destuff(message, size);
+
+    return size;
 
 }
 
@@ -82,11 +148,57 @@ char* compose_message(ll_address address, const char* msg, size_t size, int ns)
     return message;
 }
 
+
+
 char ll_calculate_bcc(const char* buffer, size_t size)
 {
     char bcc = 0;
-    for (size_t i = 0; i < size; ++i)
+    size_t i;
+    for (i = 0; i < size; ++i)
         bcc ^= buffer[i];
 
     return bcc;
 }
+
+static size_t _ll_byte_stuff(char** message, size_t size)
+{
+    size_t i;
+    size_t newSize = size;
+
+    for (i = 1; i < size - 1; ++i)
+        if ((*message)[i] == LL_FLAG || (*message)[i] == LL_ESC)
+            ++newSize;
+
+    *message = (char*)realloc(*message, newSize);
+
+    for (i = 1; i < size - 1; ++i)
+    {
+        if ((*message)[i] == LL_FLAG || (*message)[i] == LL_ESC)
+        {
+            memmove(*message+i+1, *message+i, size-i); size++;
+            (*message)[i] = LL_ESC;
+            (*message)[i+1] ^= LL_CTRL;
+        }
+    }
+
+    return newSize;
+}
+
+static size_t _ll_byte_destuff(char** message, size_t size)
+{
+    size_t i;
+
+    for (i = 1; i < size - 1; ++i)
+    {
+        if ((*message)[i] == LL_ESC)
+        {
+            memmove(*message+i, *message+i+1, size-i-1); size--;
+            (*message)[i] ^= LL_CTRL;
+        }
+    }
+
+    *message = (char*)realloc(*message, size);
+
+    return size;
+}
+

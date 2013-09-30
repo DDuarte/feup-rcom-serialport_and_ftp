@@ -57,7 +57,10 @@ typedef struct
 } link_layer;
 
 link_layer ll_open(const char* term, ll_status stat);
+
 ssize_t ll_write(link_layer* conn, const char* message, size_t size);
+bool ll_send_command(link_layer* conn, ll_cntrl command, int n);
+
 char* compose_command(ll_address address, ll_cntrl cntrl, int nr);
 char* compose_message(ll_address address, const char* msg, size_t size, int ns);
 char ll_calculate_bcc(const char* buffer, size_t size);
