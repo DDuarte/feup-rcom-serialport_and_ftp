@@ -28,12 +28,44 @@ link_layer ll_open(const char* term, ll_status stat)
 
 ssize_t ll_write(link_layer* conn, const char* message, size_t size)
 {
+    char* msg;
+    size_t bytesWritten;
+    int i;
+
     assert(conn && message);
+
+    msg = compose_message(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T, message, size, conn->sequence_number);
+    conn->sequence_number = conn->sequence_number == 1 ? 0 : 1;
+
+    size += LL_MSG_SIZE_PARTIAL;
+
+    for (i = 0; i < size; ++i)
+            printf("0x%X\n", msg[i]);
+
+    printf("\n");
+
+    size = _ll_byte_stuff(&msg, size);
+
+    for (i = 0; i < size; ++i)
+        printf("0x%X\n", msg[i]);
+
+    bytesWritten = phy_write(&conn->connection, msg, size);
+
+    // TODO: Timeout -- Temporary Solution: sleep
+
+    sleep(1);
+
+    if (bytesWritten != size)
+        perror("Error sending message");
+
+    free(msg);
+
+    return bytesWritten == size;
 
     return -1;
 }
 
-bool ll_send_command(link_layer* conn, ll_cntrl command, int n)
+bool ll_send_command(link_layer* conn, ll_cntrl command)
 {
     char* cmd;
     size_t bytesWritten;
@@ -41,7 +73,8 @@ bool ll_send_command(link_layer* conn, ll_cntrl command, int n)
 
     assert(conn);
 
-    cmd = compose_command(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T, command, n);
+    cmd = compose_command(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T, command, conn->sequence_number);
+    conn->sequence_number = conn->sequence_number == 1 ? 0 : 1;
 
     messageSize = _ll_byte_stuff(&cmd, messageSize);
 
@@ -66,7 +99,6 @@ ssize_t ll_read(link_layer* conn, char** message)
     size_t size = 0;
     ssize_t readRet;
     char c;
-    char buffer[BUFFER_SIZE];
 
     assert(conn);
 

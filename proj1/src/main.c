@@ -66,7 +66,7 @@ int main(int argc, char* argv[])
         // ssize_t sizeRead = phy_read(&conn, readValues, 255);
         // ssize_t sizeWritten = phy_write(&conn, "Hello World!", strlen("Hello World!") + 1);
 
-        ssize_t sizeWritten = ll_send_command(&conn, CNTRL_SET, 0);
+        ssize_t sizeWritten = ll_write(&conn, "Hello World!", strlen("Hello World!") + 1);
 
         if (sizeWritten < 0)
             perror("Error writing");

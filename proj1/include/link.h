@@ -11,7 +11,7 @@
 #define LL_ESC  0x7D
 #define LL_CTRL 0x20
 #define LL_CMD_SIZE 5 * sizeof(char)
-#define LL_MSG_SIZE_PARTIAL 6 * sizeof(char)
+#define LL_MSG_SIZE_PARTIAL 5 * sizeof(char)
 
 #define LL_IS_INFO_FRAME(ctrl) (!((ctrl) & 0x1))
 
@@ -59,7 +59,7 @@ typedef struct
 link_layer ll_open(const char* term, ll_status stat);
 
 ssize_t ll_write(link_layer* conn, const char* message, size_t size);
-bool ll_send_command(link_layer* conn, ll_cntrl command, int n);
+bool ll_send_command(link_layer* conn, ll_cntrl command);
 
 char* compose_command(ll_address address, ll_cntrl cntrl, int nr);
 char* compose_message(ll_address address, const char* msg, size_t size, int ns);
