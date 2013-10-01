@@ -13,7 +13,16 @@
 #define LL_CMD_SIZE 5 * sizeof(char)
 #define LL_MSG_SIZE_PARTIAL 5 * sizeof(char)
 
+#define GET_CTRL(msg) (msg)[2]
+
 #define LL_IS_INFO_FRAME(ctrl) (!((ctrl) & 0x1))
+#define LL_IS_COMMAND(ctrl) (!(LL_IS_INFO_FRAME(ctrl)))
+
+#define IS_COMMAND_SET(ctrl)    ((ctrl) == CNTRL_SET)
+#define IS_COMMAND_DISC(ctrl)   ((ctrl) == CNTRL_DISC)
+#define IS_COMMAND_UA(ctrl)     ((ctrl) == CNTRL_UA)
+#define IS_COMMAND_RR(ctrl)     (((ctrl) == CNTRL_RR)  || ((ctrl) == (0x20 | CNTRL_RR)))
+#define IS_COMMAND_REJ(ctrl)    (((ctrl) == CNTRL_REJ) || ((ctrl) == (0x20 | CNTRL_REJ)))
 
 typedef enum
 {
