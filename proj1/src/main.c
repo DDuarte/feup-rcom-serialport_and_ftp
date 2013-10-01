@@ -8,7 +8,7 @@
 #include "link.h"
 
 #define TIMEOUT_TIME 3
-
+#define RESEND_TRIES 4
 typedef enum
 {
     ST_CONNECTING,
@@ -17,22 +17,26 @@ typedef enum
 
 } State;
 
+bool signaled = false;
+
 void alarm_handler(int sig)
 {
     if (sig != SIGALRM) return;
     printf("Timeout!!!!\n");
+    signaled = true;
     alarm(TIMEOUT_TIME);
 }
 
-void subcribe_alarm()
+void subscribe_alarm()
 {
     struct sigaction sig;
     sig.sa_handler = alarm_handler;
     sigaction(SIGALRM, &sig, NULL);
+    signaled = false;
     alarm(TIMEOUT_TIME);
 }
 
-void unsubcribe_alarm()
+void unsubscribe_alarm()
 {
     struct sigaction sig;
     sig.sa_handler = NULL;
@@ -91,7 +95,7 @@ bool receiver_read_cycle(link_layer* conn)
             {
                 printf("UA Received\n");
                 printf("Connection terminated.\n");
-                unsubcribe_alarm();
+                unsubscribe_alarm();
                 done = true;
             }
             else
@@ -110,7 +114,7 @@ bool receiver_read_cycle(link_layer* conn)
                     return false;
                 }
 
-                subcribe_alarm();
+                subscribe_alarm();
                 state = ST_DISCONNECTING;
 
             }
@@ -132,9 +136,100 @@ bool receiver_read_cycle(link_layer* conn)
     return true;
 }
 
+bool transmitter_cycle(link_layer* conn)
+{
+    char* message = NULL;
+    ssize_t sizeRead;
+    int times_sent = 0;
+
+    State state = ST_CONNECTING;
+
+    while (state == ST_CONNECTING)
+    {
+        if (times_sent == 0 || signaled)
+        {
+            signaled = false;
+
+            if (times_sent == RESEND_TRIES) {
+                unsubscribe_alarm();
+                fprintf(stderr, "Couldn't establish connection.");
+                return false;
+            }
+
+            if (!ll_send_command(conn, CNTRL_SET))
+            {
+                perror("Error sending SET.");
+                return false;
+            }
+
+            ++times_sent;
+
+            if (times_sent == 1)
+                subscribe_alarm();
+
+            printf("SET sent!\n");
+        }
+
+        sizeRead = ll_read(conn, &message);
+
+        if (sizeRead >= 0 && LL_IS_COMMAND(GET_CTRL(message)) && IS_COMMAND_UA(GET_CTRL(message)))
+        {
+            state = ST_TRANSFERRING;
+        }
+    }
+
+    unsubscribe_alarm();
+
+    sleep(5); // TODO: Transmit message
+
+    times_sent = 0;
+    while (state == ST_TRANSFERRING)
+    {
+        if (times_sent == 0 || signaled)
+        {
+            signaled = false;
+
+            if (times_sent == RESEND_TRIES) {
+                unsubscribe_alarm();
+                fprintf(stderr, "Couldn't send disconnect.");
+                return false;
+            }
+
+            if (!ll_send_command(conn, CNTRL_DISC))
+            {
+                perror("Error sending DISC.");
+                return false;
+            }
+
+            ++times_sent;
+
+            if (times_sent == 1)
+                subscribe_alarm();
+
+            printf("DISC sent!\n");
+        }
+
+        sizeRead = ll_read(conn, &message);
+
+        if (sizeRead >= 0 && LL_IS_COMMAND(GET_CTRL(message)) && IS_COMMAND_DISC(GET_CTRL(message)))
+        {
+            state = ST_DISCONNECTING;
+        }
+    }
+
+    unsubscribe_alarm();
+
+    if (!ll_send_command(conn, CNTRL_UA))
+    {
+        perror("Error sending UA.");
+        return false;
+    }
+
+    return true;
+}
+
 int main(int argc, char* argv[])
 {
-    ssize_t i;
     if (argc != 2)
         return -1;
 
@@ -164,9 +259,6 @@ int main(int argc, char* argv[])
     }
     else if (strcmp(argv[1], "write") == 0)
     {
-        char* message;
-        ssize_t sizeRead;
-
         link_layer conn = ll_open("/dev/ttyS4", TRANSMITTER);
 
         // phy_connection conn = phy_open("/dev/ttyS4");
@@ -179,32 +271,7 @@ int main(int argc, char* argv[])
 
         printf("fd: %d\n", conn.connection.fd );
 
-        ssize_t sizeWritten = ll_send_command(&conn, CNTRL_SET); // Send Set Command
-
-        sizeRead = ll_read(&conn, &message);
-
-        for (i = 0; i < sizeRead; ++i)
-            printf("0x%X, ", message[i]);
-        printf("\n");
-
-        sleep(1);
-
-        ll_send_command(&conn, CNTRL_DISC); // Send Set Command
-
-        sizeRead = ll_read(&conn, &message);
-
-        for (i = 0; i < sizeRead; ++i)
-            printf("0x%X, ", message[i]);
-        printf("\n");
-
-        sleep(10);
-
-        ll_send_command(&conn, CNTRL_UA);
-
-        if (sizeWritten < 0)
-            perror("Error writing");
-
-        sleep(1);
+        transmitter_cycle(&conn);
 
         if (!ll_close(&conn))
         {
