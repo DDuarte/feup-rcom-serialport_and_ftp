@@ -11,7 +11,7 @@
 #define LL_ESC  0x7D
 #define LL_CTRL 0x20
 #define LL_CMD_SIZE 5 * sizeof(char)
-#define LL_MSG_SIZE_PARTIAL 5 * sizeof(char)
+#define LL_MSG_SIZE_PARTIAL 6 * sizeof(char)
 
 #define GET_CTRL(msg) (msg)[2]
 
@@ -23,6 +23,8 @@
 #define IS_COMMAND_UA(ctrl)     ((ctrl) == CNTRL_UA)
 #define IS_COMMAND_RR(ctrl)     (((ctrl) == CNTRL_RR)  || ((ctrl) == (0x20 | CNTRL_RR)))
 #define IS_COMMAND_REJ(ctrl)    (((ctrl) == CNTRL_REJ) || ((ctrl) == (0x20 | CNTRL_REJ)))
+
+#define BCC_ERROR -2
 
 typedef enum
 {

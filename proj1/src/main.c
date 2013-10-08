@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <time.h>
 
 #include "physical.h"
 #include "link.h"
@@ -18,11 +19,14 @@ typedef enum
 } State;
 
 bool signaled = false;
+time_t alarm_subscribed;
+
 
 void alarm_handler(int sig)
 {
     if (sig != SIGALRM) return;
-    printf("Timeout!!!!\n");
+    time_t time_passed = time(NULL) - alarm_subscribed;
+    printf("Timeout!!!! -> %lld\n",  (long long) time_passed);
     signaled = true;
     alarm(TIMEOUT_TIME);
 }
@@ -34,6 +38,7 @@ void subscribe_alarm()
     sigaction(SIGALRM, &sig, NULL);
     signaled = false;
     alarm(TIMEOUT_TIME);
+    alarm_subscribed = time(NULL);
 }
 
 void unsubscribe_alarm()
@@ -44,7 +49,7 @@ void unsubscribe_alarm()
     alarm(0);
 }
 
-bool receiver_read_cycle(link_layer* conn)
+bool receiver_read_cycle(link_layer* conn, char** message_received, size_t* size)
 {
     char* message = NULL;
     ssize_t sizeRead;
@@ -55,7 +60,16 @@ bool receiver_read_cycle(link_layer* conn)
     {
         sizeRead = ll_read(conn, &message);
 
-        if (sizeRead < 0 && state == ST_DISCONNECTING)
+        if (sizeRead == BCC_ERROR)
+        {
+            if (!ll_send_command(conn, CNTRL_REJ))
+            {
+                perror("Error sending REJ.");
+                return false;
+            }
+            continue;
+        }
+        else if (sizeRead < 0 && state == ST_DISCONNECTING)
         {
             if (!ll_send_command(conn, CNTRL_DISC))
             {
@@ -123,9 +137,14 @@ bool receiver_read_cycle(link_layer* conn)
                 fprintf(stderr, "Received DISC command: state is not transferring.\n");
             }
         }
-        else if (state == ST_TRANSFERRING)
+        else if (LL_IS_INFO_FRAME(GET_CTRL(message)) && state == ST_TRANSFERRING) // trama de informação
         {
-
+            time_t time_init = time(NULL);
+            *size = (sizeRead * sizeof(char)) - (LL_MSG_SIZE_PARTIAL);
+            *message_received = malloc(*size);
+            memcpy(*message_received, &message[4], *size);
+            ll_send_command(conn, CNTRL_RR);
+            printf("Message Received -> %lld\n", (long long) time(NULL) - time_init);
         }
         else
         {
@@ -136,11 +155,12 @@ bool receiver_read_cycle(link_layer* conn)
     return true;
 }
 
-bool transmitter_cycle(link_layer* conn)
+bool transmitter_cycle(link_layer* conn, const char* message_to_send, size_t message_size)
 {
     char* message = NULL;
     ssize_t sizeRead;
     int times_sent = 0;
+    int i;
 
     State state = ST_CONNECTING;
 
@@ -175,12 +195,61 @@ bool transmitter_cycle(link_layer* conn)
         if (sizeRead >= 0 && LL_IS_COMMAND(GET_CTRL(message)) && IS_COMMAND_UA(GET_CTRL(message)))
         {
             state = ST_TRANSFERRING;
+            printf("UA Received\n");
         }
     }
 
     unsubscribe_alarm();
 
-    sleep(5); // TODO: Transmit message
+    times_sent = 0;
+    while (state == ST_TRANSFERRING)
+    {
+        if (times_sent == 0 || signaled)
+        {
+            signaled = false;
+
+            if (times_sent == RESEND_TRIES) {
+                unsubscribe_alarm();
+                fprintf(stderr, "Couldn't send message.");
+                return false;
+            }
+
+            if (ll_write(conn, message_to_send, message_size) <  0)
+            {
+                perror("Error sending message.");
+                return false;
+            }
+
+            ++times_sent;
+
+            if (times_sent == 1)
+                subscribe_alarm();
+
+            printf("Message sent!\n");
+        }
+
+        sizeRead = ll_read(conn, &message);
+
+        printf("sizeRead = %ld\n", sizeRead);
+
+        for (i = 0; i < sizeRead; ++i)
+            printf("0x%X, ", message[i]);
+        printf("\n");
+
+        if (sizeRead >= 0 && LL_IS_COMMAND(GET_CTRL(message)) && IS_COMMAND_RR(GET_CTRL(message)))
+        {
+            printf("RR received!\n");
+            break;
+        }
+        else if (sizeRead >= 0 && LL_IS_COMMAND(GET_CTRL(message)) && IS_COMMAND_REJ(GET_CTRL(message)))
+        {
+            printf("REJ received!\n");
+            unsubscribe_alarm();
+            times_sent = 0;
+        }
+    }
+
+    unsubscribe_alarm();
 
     times_sent = 0;
     while (state == ST_TRANSFERRING)
@@ -230,6 +299,12 @@ bool transmitter_cycle(link_layer* conn)
 
 int main(int argc, char* argv[])
 {
+    char* message_to_send = "Hello World!";
+    size_t message_to_send_size = strlen(message_to_send) + 1;
+
+    char* message_to_receive = NULL;
+    size_t message_received_size = 0;
+
     if (argc != 2)
         return -1;
 
@@ -247,13 +322,15 @@ int main(int argc, char* argv[])
 
         printf("fd: %d\n", conn.connection.fd );
 
-        receiver_read_cycle(&conn);
+        receiver_read_cycle(&conn, &message_to_receive, &message_received_size);
 
         if (!ll_close(&conn))
         {
             perror("Error closing connection");
             exit(-1);
         }
+
+        printf("message received: %s\n", message_to_receive);
 
         return 0;
     }
@@ -271,7 +348,7 @@ int main(int argc, char* argv[])
 
         printf("fd: %d\n", conn.connection.fd );
 
-        transmitter_cycle(&conn);
+        transmitter_cycle(&conn, message_to_send, message_to_send_size);
 
         if (!ll_close(&conn))
         {

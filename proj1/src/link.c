@@ -30,7 +30,7 @@ ssize_t ll_write(link_layer* conn, const char* message, size_t size)
 {
     char* msg;
     size_t bytesWritten;
-    int i;
+//    int i;
 
     assert(conn && message);
 
@@ -39,21 +39,17 @@ ssize_t ll_write(link_layer* conn, const char* message, size_t size)
 
     size += LL_MSG_SIZE_PARTIAL;
 
-    for (i = 0; i < size; ++i)
-            printf("0x%X\n", msg[i]);
+//    for (i = 0; i < size; ++i)
+//            printf("0x%X\n", msg[i]);
 
-    printf("\n");
+//    printf("\n");
 
     size = _ll_byte_stuff(&msg, size);
 
-    for (i = 0; i < size; ++i)
-        printf("0x%X\n", msg[i]);
+//    for (i = 0; i < size; ++i)
+//        printf("0x%X\n", msg[i]);
 
     bytesWritten = phy_write(&conn->connection, msg, size);
-
-    // TODO: Timeout -- Temporary Solution: sleep
-
-    sleep(1);
 
     if (bytesWritten != size)
         perror("Error sending message");
@@ -79,10 +75,6 @@ bool ll_send_command(link_layer* conn, ll_cntrl command)
     messageSize = _ll_byte_stuff(&cmd, messageSize);
 
     bytesWritten = phy_write(&conn->connection, cmd, messageSize);
-
-    // TODO: Timeout -- Temporary Solution: sleep
-
-    sleep(1);
 
     if (bytesWritten != LL_CMD_SIZE)
         perror("Error sending command");
@@ -129,6 +121,28 @@ ssize_t ll_read(link_layer* conn, char** message)
 
     size = _ll_byte_destuff(message, size);
 
+    char bcc1 = ll_calculate_bcc(&(*message)[1], 2);
+
+    if (bcc1 != (*message)[3])
+    {
+        free(*message);
+        *message = NULL;
+        return BCC_ERROR;
+    }
+
+    if ( LL_IS_INFO_FRAME( GET_CTRL( *message ) ) )
+    {
+        size_t msg_size = size - LL_MSG_SIZE_PARTIAL;
+        char bcc2 = ll_calculate_bcc(&(*message)[4], msg_size);
+
+        if (bcc2 != (*message)[4 + msg_size])
+        {
+            free(*message);
+            *message = NULL;
+            return BCC_ERROR;
+        }
+    }
+
     return size;
 
 }
@@ -150,7 +164,7 @@ char * compose_command(ll_address address, ll_cntrl cntrl, int n)
     {
     case CNTRL_RR:
     case CNTRL_REJ:
-        command[2] = cntrl | (n << 6);
+        command[2] = cntrl | (n << 5);
         break;
     default:
         command[2] = cntrl;
@@ -172,10 +186,10 @@ char* compose_message(ll_address address, const char* msg, size_t size, int ns)
     message[2] = ns << 2;
     message[3] = ll_calculate_bcc(&message[1], 2);
 
-    memcpy(&message[3], msg, size);
+    memcpy(&message[4], msg, size);
 
-    message[3 + size] = ll_calculate_bcc(msg, size);
-    message[4 + size] = LL_FLAG;
+    message[4 + size] = ll_calculate_bcc(msg, size);
+    message[5 + size] = LL_FLAG;
 
     return message;
 }
