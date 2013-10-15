@@ -55,10 +55,19 @@ typedef enum
     CNTRL_REJ     =    0x1
 } ll_cntrl;
 
+typedef enum
+{
+    ST_CONNECTING,
+    ST_TRANSFERRING,
+    ST_DISCONNECTING
+
+} State;
+
 typedef struct
 {
     phy_connection connection;
     ll_status stat;
+    State state;
 
     unsigned int sequence_number;
     unsigned int timeout;
@@ -70,12 +79,8 @@ typedef struct
 link_layer ll_open(const char* term, ll_status stat);
 
 ssize_t ll_write(link_layer* conn, const char* message, size_t size);
-bool ll_send_command(link_layer* conn, ll_cntrl command);
-
-char* compose_command(ll_address address, ll_cntrl cntrl, int nr);
-char* compose_message(ll_address address, const char* msg, size_t size, int ns);
-char ll_calculate_bcc(const char* buffer, size_t size);
 ssize_t ll_read(link_layer* conn, char** message);
+
 bool ll_close(link_layer* conn);
 
 #endif /* LINK_H_ */
