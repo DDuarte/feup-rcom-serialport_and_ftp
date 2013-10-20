@@ -11,7 +11,7 @@
 #define DEBUG(msg) printf("DEBUG: %s\n", (msg))
 #define LOG(msg)   printf("LOG: %s\n", (msg))
 #define ERROR(msg) fprintf(stderr, "ERROR: %s\n", (msg))
-#define DEBUG_LINE() // printf("DEBUG: %s, %d\n", __FUNCTION__, __LINE__)
+#define DEBUG_LINE() printf("DEBUG: %s, %d\n", __FUNCTION__, __LINE__)
 
 typedef enum
 {
@@ -183,11 +183,13 @@ message_t ll_read_message(link_layer* conn)
 
     DEBUG_LINE();
 
-    if (readRet == 0)
+    printf("I suppose this is a LL_FLAG (0x7E): 0x%X\n", c);
+    printf("Maybe the readRet is 0: %d\n", readRet);
+    if (readRet <= 0)
     {
         result.type = ERROR;
         result.error.code = IO_ERROR;
-        free(message);
+        //free(message);
         return result;
     }
 
@@ -510,9 +512,7 @@ ssize_t ll_write(link_layer* conn, const char* message_to_send,
         }
     }
 
-
-
-
+    unsubscribe_alarm();
     DEBUG("Exiting ll_write.");
     return true;
 }
