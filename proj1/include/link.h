@@ -5,9 +5,9 @@
 #include "physical.h"
 
 /*! \file link.h
-	\brief Link layer interface.
+    \brief Link layer interface.
 
-	 Suite of methods that allow the communication between two adjacent nodes (sender and receiver).
+     Suite of methods that allow the communication between two adjacent nodes (sender and receiver).
 */
 
 #define MAX_FRAME_SIZE 1337

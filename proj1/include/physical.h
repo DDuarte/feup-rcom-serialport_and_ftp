@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <termios.h>
+#include <unistd.h>
 
 /*! \file physical.h
 	\brief Physical layer interface.

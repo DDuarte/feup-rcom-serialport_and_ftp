@@ -8,10 +8,7 @@
 #include <signal.h>
 #include <time.h>
 
-#define DEBUG(msg) printf("DEBUG: %s\n", (msg))
-#define LOG(msg)   printf("LOG: %s\n", (msg))
-#define ERROR(msg) fprintf(stderr, "ERROR: %s\n", (msg))
-#define DEBUG_LINE() printf("DEBUG: %s, %d\n", __FUNCTION__, __LINE__)
+#include "misc.h"
 
 typedef enum
 {
@@ -725,4 +722,3 @@ bool ll_close(link_layer* conn)
 
     return phy_close(&conn->connection);
 }
-
