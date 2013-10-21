@@ -2,8 +2,13 @@
 #define LINK_H_
 
 #include <stdbool.h>
-
 #include "physical.h"
+
+/*! \file link.h
+	\brief Link layer interface.
+
+	 Suite of methods that allow the communication between two adjacent nodes (sender and receiver).
+*/
 
 #define MAX_FRAME_SIZE 1337
 
@@ -28,24 +33,25 @@
 
 typedef enum
 {
-    ADDR_R_T = 0x03, // receiver to transmitter
-    ADDR_T_R = 0x01  // transmitter to receiver
-} ll_address;
-
-typedef enum
-{
-    FRAME_INFO,
-    FRAME_SUPER,
-    FRAME_NOT_NUMERED
-} ll_frame_type;
-
-
-typedef enum
-{
     TRANSMITTER,
     RECEIVER
 } ll_status;
 
+/*! Frame address field byte values */
+typedef enum
+{
+    ADDR_R_T = 0x03, /*!< receiver to transmitter */
+    ADDR_T_R = 0x01  /*!< transmitter to receiver */
+} ll_address;
+
+typedef enum
+{
+    FRAME_INFO,	/*!< information frame */
+    FRAME_SUPER,
+    FRAME_NOT_NUMERED
+} ll_frame_type;
+
+/*! Control field byte values */
 typedef enum
 {
     CNTRL_SET     =    0x3,
@@ -55,6 +61,7 @@ typedef enum
     CNTRL_REJ     =    0x1
 } ll_cntrl;
 
+/*! Connection state */
 typedef enum
 {
     ST_CONNECTING,
@@ -63,24 +70,56 @@ typedef enum
 
 } State;
 
+
+/*! \struct link_layer
+ *	\brief  Link layer connection structure.
+ *
+ *	Encapsulates information about the connection established between the sender
+ *	and the receiver, as several connection parameters: sequence number, timeout period and the number of transmissions.
+ */
 typedef struct
 {
-    phy_connection connection;
-    ll_status stat;
-    State state;
+    phy_connection connection; /*!< connection data (file descriptor and terminal configuration) */
+    ll_status stat; /*!< RECEIVER/SENDER status */
+    State state; /*!< current connection state */
 
-    unsigned int sequence_number;
-    unsigned int timeout;
-    unsigned int number_transmissions;
+    unsigned int sequence_number; /*!< current sequence number of the message(s) to be sent/received */
+    unsigned int timeout; /*!< protocol timeout period */
+    unsigned int number_transmissions; /*!< number of message retransmissions */
 
-    char frame[MAX_FRAME_SIZE];
+    char frame[MAX_FRAME_SIZE]; /*!< frame buffer for the data packets */
 } link_layer;
 
+/*! \brief Opens the connectio identified in a mode given as a parameter (stat).
+ *
+ * \param term connection identifier.
+ * \param stat connection status (RECEIVER/SENDER).
+ * \return link_layer structure with a positive fd on success, negative otherwise.
+ */
 link_layer ll_open(const char* term, ll_status stat);
 
+/*! \brief Writes a message with a size given as a parameter to the connection buffer.
+ *
+ * \param conn connection properties.
+ * \param message information to be sent.
+ * \param size message size in bytes.
+ * \return positive integer on success, negative otherwise.
+ */
 ssize_t ll_write(link_layer* conn, const char* message, size_t size);
+
+/*! \brief Reads a message with a size given as parameter from the connection buffer.
+ *
+ *	\param conn connection properties.
+ *	\param message buffer where the read information will be stored.
+ *	\return positive integer on success, negative otherwise.
+ */
 ssize_t ll_read(link_layer* conn, char** message);
 
+/*! \brief Closes the connection identified by conn.
+ *
+ *	\param conn connection properties.
+ *	\return true on sucess, false otherwise.
+ */
 bool ll_close(link_layer* conn);
 
 #endif /* LINK_H_ */
