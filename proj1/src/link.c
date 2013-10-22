@@ -484,6 +484,8 @@ void subscribe_alarm()
 { LOG
     struct sigaction sig;
     sig.sa_handler = alarm_handler;
+    sigemptyset(&sig.sa_mask);
+    sig.sa_flags = 0;
     sigaction(SIGALRM, &sig, NULL);
     signaled = false;
     alarm(conf.timeout);
@@ -494,6 +496,8 @@ void unsubscribe_alarm()
 { LOG
     struct sigaction sig;
     sig.sa_handler = NULL;
+    sigemptyset(&sig.sa_mask);
+    sig.sa_flags = 0;
     sigaction(SIGALRM, &sig, NULL);
     alarm(0);
 }
