@@ -344,14 +344,21 @@ int app_receive_file(const char* term)
     }
 
     int total_size_read = 0;
-    int seq_number;
+    int seq_number = -1;
     while (total_size_read != startParams[0].file_size.size.w)
     {
         char* buffer;
         int length;
+        int seq_number_before = seq_number;
         if (app_receive_data_packet(fd, &seq_number, &buffer, &length) != 0)
         {
             perror("app_receive_data_packet");
+            return -1;
+        }
+
+        if (seq_number != 254 && seq_number_before + 1 != seq_number)
+        {
+            ERRORF("Expected sequence number %d but got %d", seq_number_before + 1, seq_number);
             return -1;
         }
 
