@@ -285,6 +285,7 @@ int app_send_file(const char* term, const char* file_name)
 
     char* buffer = malloc(MAX_DATA_PACKET_SIZE);
     size_t read_bytes;
+    size_t write_bytes = 0;
     while ((read_bytes = fread(buffer, sizeof(char), MAX_DATA_PACKET_SIZE, file)) != 0)
     {
         if (app_send_data_packet(fd, (i++) % 255, buffer, read_bytes) == -1)
@@ -293,8 +294,14 @@ int app_send_file(const char* term, const char* file_name)
             return -1;
         }
 
+        write_bytes += read_bytes;
+
         buffer = memset(buffer, 0, MAX_DATA_PACKET_SIZE);
+
+        printf("\rProgress: %3d%%", (int)(write_bytes / (float)file_size * 100));
+        fflush(stdout);
     }
+    printf("\n");
 
     free(buffer);
 
