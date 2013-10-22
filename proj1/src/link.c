@@ -1,5 +1,3 @@
-#include "link.h"
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,8 +5,33 @@
 #include <unistd.h>
 #include <signal.h>
 #include <time.h>
+#include <termios.h>
+#include <fcntl.h>
 
 #include "misc.h"
+#include "link.h"
+
+#define MAX_FRAME_SIZE 512
+#define BAUDRATE B38400
+
+#define LL_FLAG 0x7E
+#define LL_ESC  0x7D
+#define LL_CTRL 0x20
+#define LL_CMD_SIZE 5 * sizeof(char)
+#define LL_MSG_SIZE_PARTIAL 6 * sizeof(char)
+
+#define GET_CTRL(msg) (msg)[2]
+
+#define LL_IS_INFO_FRAME(ctrl) (!((ctrl) & 0x1))
+#define LL_IS_COMMAND(ctrl) (!(LL_IS_INFO_FRAME(ctrl)))
+
+#define IS_COMMAND_SET(ctrl)    ((ctrl) == CNTRL_SET)
+#define IS_COMMAND_DISC(ctrl)   ((ctrl) == CNTRL_DISC)
+#define IS_COMMAND_UA(ctrl)     ((ctrl) == CNTRL_UA)
+#define IS_COMMAND_RR(ctrl)     (((ctrl) == CNTRL_RR)  || ((ctrl) == (0x20 | CNTRL_RR)))
+#define IS_COMMAND_REJ(ctrl)    (((ctrl) == CNTRL_REJ) || ((ctrl) == (0x20 | CNTRL_REJ)))
+
+#define BCC_ERROR -2
 
 typedef enum
 {
@@ -24,6 +47,39 @@ typedef enum
 {
     SET, UA, RR, REJ, DISC
 } command_t;
+
+
+/*! Frame address field byte values */
+typedef enum
+{
+    ADDR_R_T = 0x03, /*!< receiver to transmitter */
+    ADDR_T_R = 0x01  /*!< transmitter to receiver */
+} ll_address;
+
+typedef enum
+{
+    FRAME_INFO,	/*!< information frame */
+    FRAME_SUPER,
+    FRAME_NOT_NUMERED
+} ll_frame_type;
+
+/*! Control field byte values */
+typedef enum
+{
+    CNTRL_SET     =    0x3,
+    CNTRL_DISC    =     0xB,
+    CNTRL_UA     =    0x7,
+    CNTRL_RR    =    0x5,
+    CNTRL_REJ     =    0x1
+} ll_cntrl;
+
+/*! Connection state */
+typedef enum
+{
+    ST_CONNECTING,
+    ST_TRANSFERRING,
+    ST_DISCONNECTING
+} State;
 
 typedef struct
 {
@@ -56,8 +112,70 @@ typedef struct
     };
 } message_t;
 
+/*! \struct link_layer
+ *	\brief  Link layer connection structure.
+ *
+ *	Encapsulates information about the connection established between the sender
+ *	and the receiver, as several connection parameters: sequence number, timeout period and the number of transmissions.
+ */
+typedef struct
+{
+    int fd;					/*!< serial connection file descriptor */
+    struct termios term;	/*!< definitions used by the terminal I/O interface */
+    int status;             /*!< RECEIVER/TRANSMITTER status */
+    State state;            /*!< current connection state */
+
+    unsigned int sequence_number; /*!< current sequence number of the message(s) to be sent/received */
+    unsigned int timeout; /*!< protocol timeout period */
+    unsigned int number_transmissions; /*!< number of message retransmissions */
+
+    char frame[MAX_FRAME_SIZE]; /*!< frame buffer for the data packets */
+} link_layer;
+
+static link_layer _ll;
+
 static size_t _ll_byte_stuff(char** message, size_t size);
 static size_t _ll_byte_destuff(char** message, size_t size);
+
+int phy_open(const char* term)
+{ LOG
+    int fd;
+    struct termios oldtio;
+    struct termios newtio;
+
+    if ((fd = open(term, O_RDWR | O_NOCTTY )) < 0)
+        return -1;
+
+    if (tcgetattr(fd,&oldtio) != 0)
+        return -1;
+
+    bzero(&newtio, sizeof(newtio));
+    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
+
+    newtio.c_lflag = 0;
+
+    newtio.c_cc[VTIME] = 0;
+    newtio.c_cc[VMIN]  = 1;
+
+    if (tcflush(fd, TCIFLUSH) != 0)
+        return -1;
+
+    if (tcsetattr(fd,TCSANOW,&newtio) != 0)
+        return -1;
+
+    _ll.fd = fd;
+    _ll.term = oldtio;
+
+    return fd;
+}
+
+bool phy_close(int fd)
+{ LOG
+    if (fd == -1) return false;
+    return tcsetattr(fd, TCSANOW, &_ll.term) == 0;
+}
 
 char ll_calculate_bcc(const char* buffer, size_t size)
 { LOG
@@ -69,7 +187,7 @@ char ll_calculate_bcc(const char* buffer, size_t size)
     return bcc;
 }
 
-char * compose_command(ll_address address, ll_cntrl cntrl, int n)
+char* compose_command(ll_address address, ll_cntrl cntrl, int n)
 { LOG
     char * command = malloc(LL_CMD_SIZE);
     command[0] = LL_FLAG;
@@ -109,21 +227,21 @@ char* compose_message(ll_address address, const char* msg, size_t size, int ns)
     return message;
 }
 
-ssize_t ll_send_message(link_layer* conn, const char* message, size_t size)
+ssize_t ll_send_message(int fd, const char* message, size_t size)
 { LOG
     char* msg;
     size_t bytesWritten;
 
-    assert(conn && message);
+    assert(message);
 
-    msg = compose_message(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T,
-            message, size, conn->sequence_number);
+    msg = compose_message(_ll.status == TRANSMITTER ? ADDR_T_R : ADDR_R_T,
+            message, size, _ll.sequence_number);
 
     size += LL_MSG_SIZE_PARTIAL;
 
     size = _ll_byte_stuff(&msg, size);
 
-    bytesWritten = phy_write(&conn->connection, msg, size);
+    bytesWritten = write(fd, msg, size);
 
     if (bytesWritten != size)
         perror("Error sending message");
@@ -133,19 +251,17 @@ ssize_t ll_send_message(link_layer* conn, const char* message, size_t size)
     return bytesWritten == size;
 }
 
-bool ll_send_command(link_layer* conn, ll_cntrl command)
+bool ll_send_command(int fd, ll_cntrl command)
 { LOG
     size_t bytesWritten;
     size_t messageSize = LL_CMD_SIZE;
 
-    assert(conn);
-
-    char* cmd = compose_command(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T,
-            command, conn->sequence_number);
+    char* cmd = compose_command(_ll.status == TRANSMITTER ? ADDR_T_R : ADDR_R_T,
+            command, _ll.sequence_number);
 
     messageSize = _ll_byte_stuff(&cmd, messageSize);
 
-    bytesWritten = phy_write(&conn->connection, cmd, messageSize);
+    bytesWritten = write(fd, cmd, messageSize);
 
     if (bytesWritten != LL_CMD_SIZE)
         perror("Error sending command");
@@ -157,7 +273,7 @@ bool ll_send_command(link_layer* conn, ll_cntrl command)
 
 #define BUFFER_SIZE 255
 
-message_t ll_read_message(link_layer* conn)
+message_t ll_read_message(int fd)
 { LOG
     message_t result;
 
@@ -165,16 +281,10 @@ message_t ll_read_message(link_layer* conn)
     ssize_t readRet;
     char c;
 
-    assert(conn);
-
-    DEBUG_LINE();
-
     do
     {
-        readRet = phy_read(&conn->connection, &c, 1);
+        readRet = read(fd, &c, 1);
     } while (readRet == 1 && c != LL_FLAG);
-
-    DEBUG_LINE();
 
     if (readRet <= 0)
     {
@@ -183,21 +293,14 @@ message_t ll_read_message(link_layer* conn)
         return result;
     }
 
-    DEBUG_LINE();
-
     char* message = malloc(BUFFER_SIZE * sizeof(char));
     message[0] = LL_FLAG;
     size = 1;
 
-    DEBUG_LINE();
-
     do
     {
-        DEBUG_LINE();
-        readRet = phy_read(&conn->connection, &c, 1);
+        readRet = read(fd, &c, 1);
         message[size++] = c;
-
-        DEBUG_LINE();
 
         if (readRet == 1 && c != LL_FLAG && size % BUFFER_SIZE == 0)
         {
@@ -205,8 +308,6 @@ message_t ll_read_message(link_layer* conn)
             message = (char*) realloc(message, mult * BUFFER_SIZE);
         }
     } while (readRet == 1 && c != LL_FLAG);
-
-    DEBUG_LINE();
 
     if (readRet == 0)
     {
@@ -216,11 +317,7 @@ message_t ll_read_message(link_layer* conn)
         return result;
     }
 
-    DEBUG_LINE();
-
     size = _ll_byte_destuff(&message, size);
-
-    DEBUG_LINE();
 
     char bcc1 = ll_calculate_bcc(&message[1], 2);
 
@@ -231,8 +328,6 @@ message_t ll_read_message(link_layer* conn)
         free(message);
         return result;
     }
-
-    DEBUG_LINE();
 
     if (LL_IS_INFO_FRAME(GET_CTRL(message)))
     {
@@ -251,10 +346,8 @@ message_t ll_read_message(link_layer* conn)
         {
             result.type = INFORMATION;
             result.information.message_size = msg_size;
-            result.information.message = malloc(
-                    result.information.message_size * sizeof(char));
-            memcpy(result.information.message, &message[4],
-                    result.information.message_size);
+            result.information.message = malloc(result.information.message_size);
+            memcpy(result.information.message, &message[4], result.information.message_size);
         }
     }
     else
@@ -279,8 +372,6 @@ message_t ll_read_message(link_layer* conn)
             result.r = (GET_CTRL(message) >> 5) & 0x1;
         }
     }
-
-    DEBUG_LINE();
 
     free(message);
     return result;
@@ -364,22 +455,20 @@ void unsubscribe_alarm()
     alarm(0);
 }
 
-link_layer ll_open(const char* term, ll_status stat)
+int ll_open(const char* term, int status)
 { LOG
-    link_layer ll;
+    int fd = phy_open(term);
 
-    ll.connection = phy_open(term);
+    if (fd < 0)
+        return fd;
 
-    if (ll.connection.fd < 0)
-        return ll;
-
-    if (stat == TRANSMITTER)
+    if (status == TRANSMITTER)
     {
         message_t message;
         int times_sent = 0;
-        ll.state = ST_CONNECTING;
+        _ll.state = ST_CONNECTING;
 
-        while (ll.state == ST_CONNECTING)
+        while (_ll.state == ST_CONNECTING)
         {
             if (times_sent == 0 || signaled)
             {
@@ -389,10 +478,10 @@ link_layer ll_open(const char* term, ll_status stat)
                 {
                     unsubscribe_alarm();
                     ERROR("Couldn't establish connection.");
-                    return ll;
+                    return fd;
                 }
 
-                ll_send_command(&ll, CNTRL_SET);
+                ll_send_command(fd, CNTRL_SET);
 
                 ++times_sent;
 
@@ -402,11 +491,11 @@ link_layer ll_open(const char* term, ll_status stat)
                 DEBUG("SET sent");
             }
 
-            message = ll_read_message(&ll);
+            message = ll_read_message(fd);
 
             if (message.type == COMMAND && message.command.code == UA)
             {
-                ll.state = ST_TRANSFERRING;
+                _ll.state = ST_TRANSFERRING;
                 DEBUG("UA Received");
             }
         }
@@ -416,45 +505,44 @@ link_layer ll_open(const char* term, ll_status stat)
     else
     {
         message_t message;
-        ll.state = ST_CONNECTING;
+        _ll.state = ST_CONNECTING;
 
-        while (ll.state == ST_CONNECTING)
+        while (_ll.state == ST_CONNECTING)
         {
-            message = ll_read_message(&ll);
+            message = ll_read_message(fd);
 
             if (message.type == COMMAND && message.command.code == SET)
             {
                 DEBUG("SET received");
-                if (!ll_send_command(&ll, CNTRL_UA))
+                if (!ll_send_command(fd, CNTRL_UA))
                 {
                     perror("Error sending UA.");
-                    return ll;
+                    return fd;
                 }
 
                 DEBUG("UA Sent");
 
                 DEBUG("Connection established");
 
-                ll.state = ST_TRANSFERRING;
+                _ll.state = ST_TRANSFERRING;
             }
         }
     }
 
-    ll.stat = stat;
-    ll.number_transmissions = 0;
-    ll.sequence_number = 0;
-    ll.timeout = 0;
+    _ll.status = status;
+    _ll.number_transmissions = 0;
+    _ll.sequence_number = 0;
+    _ll.timeout = 0;
 
-    return ll;
+    return fd;
 }
 
-bool ll_write(link_layer* conn, const char* message_to_send,
-        size_t message_size)
+bool ll_write(int fd, const char* message_to_send, size_t message_size)
 { LOG
     message_t message;
     int times_sent = 0;
 
-    while (conn->state == ST_TRANSFERRING)
+    while (_ll.state == ST_TRANSFERRING)
     {
         if (times_sent == 0 || signaled)
         {
@@ -467,7 +555,7 @@ bool ll_write(link_layer* conn, const char* message_to_send,
                 return false;
             }
 
-            ll_send_message(conn, message_to_send, message_size);
+            ll_send_message(fd, message_to_send, message_size);
 
             ++times_sent;
 
@@ -475,20 +563,16 @@ bool ll_write(link_layer* conn, const char* message_to_send,
                 subscribe_alarm();
 
             DEBUG("Message sent");
-            DEBUG_LINE();
         }
 
-        DEBUG_LINE();
-        message = ll_read_message(conn);
-        DEBUG_LINE();
+        message = ll_read_message(fd);
 
         if (message.type == COMMAND && message.command.code == RR)
         {
-            if (conn->sequence_number != message.r)
+            if (_ll.sequence_number != message.r)
             {
                 DEBUG("RR Received");
-                conn->sequence_number = message.r;
-                printf("message r = %d\n", message.r);
+                _ll.sequence_number = message.r;
             }
             unsubscribe_alarm();
             break;
@@ -506,14 +590,14 @@ bool ll_write(link_layer* conn, const char* message_to_send,
     return true;
 }
 
-ssize_t ll_read(link_layer* conn, char** message_received)
+ssize_t ll_read(int fd, char** message_received)
 { LOG
     message_t message;
     bool done = false;
 
     while (!done)
     {
-        message = ll_read_message(conn);
+        message = ll_read_message(fd);
 
         switch (message.type)
         {
@@ -522,8 +606,8 @@ ssize_t ll_read(link_layer* conn, char** message_received)
                 switch (message.error.code)
                 {
                     case BCC2_ERROR:
-                        conn->sequence_number = message.s;
-                        ll_send_command(conn, CNTRL_REJ);
+                        _ll.sequence_number = message.s;
+                        ll_send_command(fd, CNTRL_REJ);
                         break;
                     case IO_ERROR:
                         perror("Error reading message");
@@ -553,7 +637,7 @@ ssize_t ll_read(link_layer* conn, char** message_received)
                     {
                         DEBUG("DISC received");
 
-                        conn->state = ST_DISCONNECTING;
+                        _ll.state = ST_DISCONNECTING;
 
                         done = true;
                         break;
@@ -569,16 +653,15 @@ ssize_t ll_read(link_layer* conn, char** message_received)
             }
             case INFORMATION:
             {
-                if (message.s == conn->sequence_number)
+                if (message.s == _ll.sequence_number)
                 {
                     *message_received = malloc(message.information.message_size);
 
                     memcpy(*message_received, message.information.message, message.information.message_size);
 
                     DEBUG("Message Received");
-                    printf("Message s = %d, size = %d\n", message.s, message.information.message_size);
-                    conn->sequence_number = !message.s;
-                    ll_send_command(conn, CNTRL_RR);
+                    _ll.sequence_number = !message.s;
+                    ll_send_command(fd, CNTRL_RR);
                     DEBUG("RR Sent");
                     done = true;
                 }
@@ -592,16 +675,14 @@ ssize_t ll_read(link_layer* conn, char** message_received)
     return message.information.message_size;
 }
 
-bool ll_close(link_layer* conn)
+bool ll_close(int fd)
 { LOG
-    assert(conn);
-
-    if (conn->stat == TRANSMITTER)
+    if (_ll.status == TRANSMITTER)
     {
         message_t message;
         int times_sent = 0;
 
-        while (conn->state == ST_TRANSFERRING)
+        while (_ll.state == ST_TRANSFERRING)
         {
             if (times_sent == 0 || signaled)
             {
@@ -614,7 +695,7 @@ bool ll_close(link_layer* conn)
                     return false;
                 }
 
-                ll_send_command(conn, CNTRL_DISC);
+                ll_send_command(fd, CNTRL_DISC);
 
                 ++times_sent;
 
@@ -624,26 +705,22 @@ bool ll_close(link_layer* conn)
                 DEBUG("DISC sent");
             }
 
-            DEBUG_LINE();
-            message = ll_read_message(conn);
-            DEBUG_LINE();
+            message = ll_read_message(fd);
 
             if (message.type == COMMAND && message.command.code == DISC)
             {
                 DEBUG("DISC Received");
-                conn->state = ST_DISCONNECTING;
+                _ll.state = ST_DISCONNECTING;
             }
             else
             {
                 DEBUG("Resending DISC");
-                printf("message.type = %d\n", message.type);
-                printf("error code = %d\n", message.error.code);
             }
         }
 
         unsubscribe_alarm();
 
-        if (!ll_send_command(conn, CNTRL_UA))
+        if (!ll_send_command(fd, CNTRL_UA))
         {
             perror("Error sending UA.");
             return false;
@@ -656,15 +733,14 @@ bool ll_close(link_layer* conn)
         bool ua_received = false;
         int times_sent = 0;
 
-        while (conn->state == ST_TRANSFERRING)
+        while (_ll.state == ST_TRANSFERRING)
         {
-            message = ll_read_message(conn);
+            message = ll_read_message(fd);
 
             if (message.type == COMMAND && message.command.code == DISC)
             {
                 DEBUG("DISC received");
-
-                conn->state = ST_DISCONNECTING;
+                _ll.state = ST_DISCONNECTING;
             }
         }
 
@@ -681,7 +757,7 @@ bool ll_close(link_layer* conn)
                     return false;
                 }
 
-                ll_send_command(conn, CNTRL_DISC);
+                ll_send_command(fd, CNTRL_DISC);
 
                 ++times_sent;
 
@@ -691,7 +767,7 @@ bool ll_close(link_layer* conn)
                 DEBUG("DISC sent");
             }
 
-            message = ll_read_message(conn);
+            message = ll_read_message(fd);
 
             if (message.type == COMMAND && message.command.code == UA)
             {
@@ -704,5 +780,5 @@ bool ll_close(link_layer* conn)
 
     unsubscribe_alarm();
 
-    return phy_close(&conn->connection);
+    return phy_close(fd);
 }

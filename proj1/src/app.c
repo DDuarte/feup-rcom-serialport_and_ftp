@@ -25,7 +25,7 @@ typedef struct control_param
     {
         struct file_size
         {
-            int16 size;
+            int32 size;
         } file_size;
 
         struct file_name
@@ -35,10 +35,10 @@ typedef struct control_param
     };
 } control_param;
 
-int app_receive_data_packet(link_layer* ll, int* seq_number, char** buffer, int* length)
+int app_receive_data_packet(int fd, int* seq_number, char** buffer, int* length)
 {
     char* packet_buffer;
-    ssize_t total_size = ll_read(ll, &packet_buffer);
+    ssize_t total_size = ll_read(fd, &packet_buffer);
     if (total_size < 0)
     {
         perror("ll_read");
@@ -54,12 +54,14 @@ int app_receive_data_packet(link_layer* ll, int* seq_number, char** buffer, int*
     }
 
     int seq = packet_buffer[1];
-    int16 size;
+    int32 size;
     size.b[0] = packet_buffer[2];
     size.b[1] = packet_buffer[3];
+    size.b[2] = packet_buffer[4];
+    size.b[3] = packet_buffer[5];
 
     *buffer = malloc(size.w);
-    memcpy(*buffer, &packet_buffer[4], size.w);
+    memcpy(*buffer, &packet_buffer[6], size.w);
     free(packet_buffer);
 
     *seq_number = seq;
@@ -68,23 +70,25 @@ int app_receive_data_packet(link_layer* ll, int* seq_number, char** buffer, int*
     return 0;
 }
 
-int app_send_data_packet(link_layer* ll, int seq_number, const char* buffer, int length)
+int app_send_data_packet(int fd, int seq_number, const char* buffer, int length)
 { LOG
     assert(buffer);
 
-    int total_size = 1 + 1 + 2 + length;
+    int total_size = 1 + 1 + 4 + length;
     char* packet_buffer = malloc(total_size);
 
-    int16 length16;
-    length16.w = length;
+    int32 length32;
+    length32.w = length;
 
     packet_buffer[0] = CONTROL_FIELD_DATA;
     packet_buffer[1] = seq_number;
-    packet_buffer[2] = length16.b[0];
-    packet_buffer[3] = length16.b[1];
-    memcpy(&packet_buffer[4], buffer, length);
+    packet_buffer[2] = length32.b[0];
+    packet_buffer[3] = length32.b[1];
+    packet_buffer[4] = length32.b[2];
+    packet_buffer[5] = length32.b[3];
+    memcpy(&packet_buffer[6], buffer, length);
 
-    if (!ll_write(ll, packet_buffer, total_size))
+    if (!ll_write(fd, packet_buffer, total_size))
     {
         perror("ll_write");
         return -1;
@@ -92,14 +96,13 @@ int app_send_data_packet(link_layer* ll, int seq_number, const char* buffer, int
 
     free(packet_buffer);
 
-    DEBUG_LINE_MSG("successful");
     return 0;
 }
 
-int app_receive_control_packet(link_layer* ll, int* ctrl, int n, control_param* params)
+int app_receive_control_packet(int fd, int* ctrl, int n, control_param* params)
 { LOG
     char* buffer = malloc(MAX_DATA_PACKET_SIZE);
-    ssize_t size = ll_read(ll, &buffer);
+    ssize_t size = ll_read(fd, &buffer);
     if (size < 0)
     {
         perror("ll_read");
@@ -122,7 +125,9 @@ int app_receive_control_packet(link_layer* ll, int* ctrl, int n, control_param* 
                 read_size += 1; // ignore size of param
                 param.file_size.size.b[0] = buffer[read_size];
                 param.file_size.size.b[1] = buffer[read_size + 1];
-                read_size += 2;
+                param.file_size.size.b[2] = buffer[read_size + 2];
+                param.file_size.size.b[3] = buffer[read_size + 3];
+                read_size += 4;
                 break;
             }
             case FIELD_PARAM_TYPE_FILE_NAME:
@@ -143,7 +148,7 @@ int app_receive_control_packet(link_layer* ll, int* ctrl, int n, control_param* 
     return 0;
 }
 
-int app_send_control_packet(link_layer* ll, int ctrl, int n, control_param* params)
+int app_send_control_packet(int fd, int ctrl, int n, control_param* params)
 { LOG
     int total_size = 2; // control_field + n
 
@@ -152,7 +157,7 @@ int app_send_control_packet(link_layer* ll, int ctrl, int n, control_param* para
         switch (params[i].type)
         {
             case FIELD_PARAM_TYPE_FILE_SIZE:
-                total_size += 1 + 1 + 2;
+                total_size += 1 + 1 + 4;
                 break;
             case FIELD_PARAM_TYPE_FILE_NAME:
                 total_size += 1 + 1 + strlen(params[i].file_name.name);
@@ -180,7 +185,9 @@ int app_send_control_packet(link_layer* ll, int ctrl, int n, control_param* para
                 dest[0] = 2; // short
                 dest[1] = params[i].file_size.size.b[0];
                 dest[2] = params[i].file_size.size.b[1];
-                write_size += 3;
+                dest[3] = params[i].file_size.size.b[2];
+                dest[4] = params[i].file_size.size.b[3];
+                write_size += 1 + 4;
                 break;
             }
             case FIELD_PARAM_TYPE_FILE_NAME:
@@ -201,7 +208,7 @@ int app_send_control_packet(link_layer* ll, int ctrl, int n, control_param* para
         }
     }
 
-    if (!ll_write(ll, buffer, total_size))
+    if (!ll_write(fd, buffer, total_size))
     {
         perror("ll_write");
         return -1;
@@ -242,8 +249,8 @@ int app_send_file(const char* term, const char* file_name)
     }
 
     // start link layer
-    link_layer ll = ll_open(term, TRANSMITTER);
-    if (ll.connection.fd == -1)
+    int fd = ll_open(term, TRANSMITTER);
+    if (fd == -1)
     {
         perror("ll_open");
         return -1;
@@ -267,7 +274,7 @@ int app_send_file(const char* term, const char* file_name)
 
     control_param params[] = { paramStartFileSize, paramStartFileName };
 
-    if (app_send_control_packet(&ll, CONTROL_FIELD_START, 2, params) != 0)
+    if (app_send_control_packet(fd, CONTROL_FIELD_START, 2, params) != 0)
     {
         perror("app_send_control_packet");
         return -1;
@@ -279,7 +286,7 @@ int app_send_file(const char* term, const char* file_name)
     size_t read_bytes;
     while ((read_bytes = fread(buffer, sizeof(char), MAX_DATA_PACKET_SIZE, file)) != 0)
     {
-        if (app_send_data_packet(&ll, (i++) % 255, buffer, read_bytes) == -1)
+        if (app_send_data_packet(fd, (i++) % 255, buffer, read_bytes) == -1)
         {
             perror("app_send_data_packet");
             return -1;
@@ -296,13 +303,13 @@ int app_send_file(const char* term, const char* file_name)
         return -1;
     }
 
-    if (app_send_control_packet(&ll, CONTROL_FIELD_END, 0, NULL) != 0)
+    if (app_send_control_packet(fd, CONTROL_FIELD_END, 0, NULL) != 0)
     {
         perror("app_send_control_packet");
         return -1;
     }
 
-    if (!ll_close(&ll))
+    if (!ll_close(fd))
     {
         perror("ll_close");
         return -1;
@@ -314,8 +321,8 @@ int app_send_file(const char* term, const char* file_name)
 int app_receive_file(const char* term)
 { LOG
     // start link layer
-    link_layer ll = ll_open(term, RECEIVER);
-    if (ll.connection.fd == -1)
+    int fd = ll_open(term, RECEIVER);
+    if (fd == -1)
     {
         perror("ll_open");
         return -1;
@@ -323,7 +330,7 @@ int app_receive_file(const char* term)
 
     int ctrlStart;
     control_param startParams[2];
-    if (app_receive_control_packet(&ll, &ctrlStart, 2, startParams) != 0)
+    if (app_receive_control_packet(fd, &ctrlStart, 2, startParams) != 0)
     {
         perror("app_receive_control_packet (start)");
         return -1;
@@ -341,7 +348,7 @@ int app_receive_file(const char* term)
     {
         char* buffer;
         int length;
-        if (app_receive_data_packet(&ll, &seq_number, &buffer, &length) != 0)
+        if (app_receive_data_packet(fd, &seq_number, &buffer, &length) != 0)
         {
             perror("app_receive_data_packet");
             return -1;
@@ -355,7 +362,7 @@ int app_receive_file(const char* term)
     int ctrlEnd;
     control_param endParam;
 
-    if (app_receive_control_packet(&ll, &ctrlEnd, 1, &endParam) != 0)
+    if (app_receive_control_packet(fd, &ctrlEnd, 1, &endParam) != 0)
     {
         perror("app_receive_control_packet (end)");
         return -1;
@@ -367,7 +374,7 @@ int app_receive_file(const char* term)
         return -1;
     }
 
-    if (!ll_close(&ll))
+    if (!ll_close(fd))
     {
         perror("ll_close");
         return -1;

@@ -23,9 +23,10 @@ int main(int argc, char* argv[])
     }
     else
     {
-        printf("Usage:\n");
-        printf("\t- send file: %s device file_name\n", argv[0]);
-        printf("\t- receive file: %s device\n", argv[0]);
+        ERROR("Usage:");
+        ERRORF("\t- send file: %s device in_file_name", argv[0]);
+        ERRORF("\t- receive file: %s device > out_file_name", argv[0]);
+        ERROR("Note: errors and other messages are printed to stderr");
         return EXIT_FAILURE;
     }
 

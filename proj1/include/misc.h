@@ -1,16 +1,19 @@
 #ifndef MISC_H_
 #define MISC_H_
 
+#include <stdint.h>
+
 /*! \file misc.h
     \brief Miscellaneous functions and macros
 
      Definition of functions and macros that are used across this project
 */
 
-#define DEBUG(msg)          //printf("DEBUG: %s\n", (msg))
-#define ERROR(msg)          //fprintf(stderr, "ERROR: %s\n", (msg))
-#define DEBUG_LINE()        //printf("DEBUG: %s, %d\n", __FUNCTION__, __LINE__)
-#define DEBUG_LINE_MSG(msg) //printf("DEBUG: %s (%s, %d)\n", (msg), __FUNCTION__, __LINE__)
+#define DEBUG(msg)                fprintf(stderr, "DEBUG: %s\n", msg)
+#define DEBUGF(msg, args...)      fprintf(stderr, "DEBUG: " msg "\n", args)
+#define ERROR(msg)                fprintf(stderr, "ERROR: %s\n", msg)
+#define ERRORF(msg, args...)      fprintf(stderr, "ERROR: " msg "\n", args)
+#define DEBUG_LINE(msg, args...) fprintf(stderr, "DEBUG: " msg " (%s, %d)\n", args, __FUNCTION__, __LINE__)
 
 //#define DEBUG_CALLS // only enable when sh*t goes really wrong
 
@@ -20,10 +23,10 @@
     #define LOG ((void)0);
 #endif
 
-typedef union int16
+typedef union int32
 {
-   char b[2];
-   short w;
-} int16;
+   char b[4];
+   int32_t w;
+} int32;
 
 #endif // MISC_H_
