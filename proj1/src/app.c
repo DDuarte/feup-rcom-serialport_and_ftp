@@ -92,6 +92,7 @@ int app_send_data_packet(int fd, int seq_number, const char* buffer, int length)
     if (!ll_write(fd, packet_buffer, total_size))
     {
         perror("ll_write");
+        free(packet_buffer);
         return -1;
     }
 
@@ -102,7 +103,7 @@ int app_send_data_packet(int fd, int seq_number, const char* buffer, int length)
 
 int app_receive_control_packet(int fd, int* ctrl, int n, control_param* params)
 { LOG
-    char* buffer = malloc(MAX_DATA_PACKET_SIZE);
+    char* buffer;
     ssize_t size = ll_read(fd, &buffer);
     if (size < 0)
     {
@@ -113,6 +114,12 @@ int app_receive_control_packet(int fd, int* ctrl, int n, control_param* params)
     *ctrl = buffer[0];
 
     int read_size = 2; // ctrl + n
+
+    if (buffer[1] != n)
+    {
+        ERRORF("Expected %d parameters but got %d", n, buffer[1]);
+        return -1;
+    }
 
     for (int i = 0; i < n; ++i)
     {
@@ -145,6 +152,8 @@ int app_receive_control_packet(int fd, int* ctrl, int n, control_param* params)
 
         params[i] = param;
     }
+
+    free(buffer);
 
     return 0;
 }
@@ -183,7 +192,7 @@ int app_send_control_packet(int fd, int ctrl, int n, control_param* params)
             case FIELD_PARAM_TYPE_FILE_SIZE:
             {
                 char* dest = &buffer[write_size];
-                dest[0] = 2; // short
+                dest[0] = 4; // int32
                 dest[1] = params[i].file_size.size.b[0];
                 dest[2] = params[i].file_size.size.b[1];
                 dest[3] = params[i].file_size.size.b[2];
@@ -203,6 +212,7 @@ int app_send_control_packet(int fd, int ctrl, int n, control_param* params)
             }
             default:
             {
+                free(buffer);
                 assert(false && "Unknown FIELD_PARAM_TYPE");
                 return -1;
             }
@@ -212,6 +222,7 @@ int app_send_control_packet(int fd, int ctrl, int n, control_param* params)
     if (!ll_write(fd, buffer, total_size))
     {
         perror("ll_write");
+        free(buffer);
         return -1;
     }
 
@@ -291,6 +302,7 @@ int app_send_file(const char* term, const char* file_name)
         if (app_send_data_packet(fd, (i++) % 255, buffer, read_bytes) == -1)
         {
             perror("app_send_data_packet");
+            free(buffer);
             return -1;
         }
 
@@ -350,6 +362,10 @@ int app_receive_file(const char* term)
         return -1;
     }
 
+    DEBUGF("File size to receive: %d", startParams[0].file_size.size.w);
+    DEBUGF("File name to receive: %d", startParams[1].file_name.name);
+    free(startParams[1].file_name.name);
+
     int total_size_read = 0;
     int seq_number = -1;
     while (total_size_read != startParams[0].file_size.size.w)
@@ -360,12 +376,14 @@ int app_receive_file(const char* term)
         if (app_receive_data_packet(fd, &seq_number, &buffer, &length) != 0)
         {
             perror("app_receive_data_packet");
+            free(buffer);
             return -1;
         }
 
         if (seq_number != 254 && seq_number_before + 1 != seq_number)
         {
             ERRORF("Expected sequence number %d but got %d", seq_number_before + 1, seq_number);
+            free(buffer);
             return -1;
         }
 
@@ -375,9 +393,7 @@ int app_receive_file(const char* term)
     }
 
     int ctrlEnd;
-    control_param endParam;
-
-    if (app_receive_control_packet(fd, &ctrlEnd, 1, &endParam) != 0)
+    if (app_receive_control_packet(fd, &ctrlEnd, 0, NULL) != 0)
     {
         perror("app_receive_control_packet (end)");
         return -1;

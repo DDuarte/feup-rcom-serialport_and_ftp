@@ -705,6 +705,7 @@ ssize_t ll_read(int fd, char** message_received)
                     *message_received = malloc(message.information.message_size);
 
                     memcpy(*message_received, message.information.message, message.information.message_size);
+                    free(message.information.message);
 
                     DEBUG("Message Received");
                     _ll.sequence_number = !message.s;
