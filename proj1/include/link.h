@@ -46,4 +46,12 @@ ssize_t ll_read(int fd, char** message);
  */
 bool ll_close(int fd);
 
+void conf_set_baudrate(int baudrate);
+void conf_set_max_info_frame_size(int max_info_frame_size);
+void conf_set_retries(int retries);
+void conf_set_timeout(int timeout);
+void conf_set_rand_seed(int rand_seed);
+void conf_bcc1_prob_error(int bcc1_prob_error);
+void conf_bcc2_prob_error(int bcc2_prob_error);
+
 #endif /* LINK_H_ */

@@ -11,9 +11,6 @@
 #include "misc.h"
 #include "link.h"
 
-#define MAX_FRAME_SIZE 512
-#define BAUDRATE B38400
-
 #define LL_FLAG 0x7E
 #define LL_ESC  0x7D
 #define LL_CTRL 0x20
@@ -47,7 +44,6 @@ typedef enum
 {
     SET, UA, RR, REJ, DISC
 } command_t;
-
 
 /*! Frame address field byte values */
 typedef enum
@@ -128,14 +124,66 @@ typedef struct
     unsigned int sequence_number; /*!< current sequence number of the message(s) to be sent/received */
     unsigned int timeout; /*!< protocol timeout period */
     unsigned int number_transmissions; /*!< number of message retransmissions */
-
-    char frame[MAX_FRAME_SIZE]; /*!< frame buffer for the data packets */
 } link_layer;
 
 static link_layer _ll;
 
 static size_t _ll_byte_stuff(char** message, size_t size);
 static size_t _ll_byte_destuff(char** message, size_t size);
+
+typedef struct
+{
+    int baudrate; /// baudrate (before conversion to termios.h's defines)
+    int max_info_frame_size; /// maximum size for I frames
+    int retries; /// number of retries
+    int timeout; /// timeout in seconds
+    int rand_seed; /// seed for srand()
+    int bcc1_prob_error; /// probability of bcc1 having errors (per packet) [0-100]
+    int bcc2_prob_error; /// probability of bcc2 having errors (per packet) [0-100]
+} config_t;
+
+static config_t conf = // default values
+{
+    .baudrate = 38400,
+    .max_info_frame_size = 512,
+    .retries = 4,
+    .timeout = 3,
+    .rand_seed = 0,
+    .bcc1_prob_error = 0,
+    .bcc2_prob_error = 0
+};
+
+void conf_set_baudrate(int baudrate) { LOG conf.baudrate = baudrate; }
+void conf_set_max_info_frame_size(int max_info_frame_size) { LOG conf.max_info_frame_size = max_info_frame_size; }
+void conf_set_retries(int retries) { LOG conf.retries = retries; }
+void conf_set_timeout(int timeout) { LOG conf.timeout = timeout; }
+void conf_set_rand_seed(int rand_seed) { LOG conf.rand_seed = rand_seed; }
+void conf_bcc1_prob_error(int bcc1_prob_error) { LOG conf.bcc1_prob_error = bcc1_prob_error; }
+void conf_bcc2_prob_error(int bcc2_prob_error) { LOG conf.bcc2_prob_error = bcc2_prob_error; }
+
+int get_proper_baudrate(int baudrate)
+{ LOG
+    switch (baudrate)
+    {
+        case 0:     return B0;
+        case 50:    return B50;
+        case 75:    return B75;
+        case 110:   return B110;
+        case 134:   return B134;
+        case 150:   return B150;
+        case 200:   return B200;
+        case 300:   return B300;
+        case 600:   return B600;
+        case 1200:  return B1200;
+        case 1800:  return B1800;
+        case 2400:  return B2400;
+        case 4800:  return B4800;
+        case 9600:  return B9600;
+        case 19200: return B19200;
+        case 38400: return B38400;
+        default: return -1;
+    }
+}
 
 int phy_open(const char* term)
 { LOG
@@ -150,7 +198,7 @@ int phy_open(const char* term)
         return -1;
 
     bzero(&newtio, sizeof(newtio));
-    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_cflag = get_proper_baudrate(conf.baudrate) | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
 
@@ -271,8 +319,6 @@ bool ll_send_command(int fd, ll_cntrl command)
     return bytesWritten == LL_CMD_SIZE;
 }
 
-#define BUFFER_SIZE 255
-
 message_t ll_read_message(int fd)
 { LOG
     message_t result;
@@ -293,7 +339,7 @@ message_t ll_read_message(int fd)
         return result;
     }
 
-    char* message = malloc(BUFFER_SIZE * sizeof(char));
+    char* message = malloc(conf.max_info_frame_size);
     message[0] = LL_FLAG;
     size = 1;
 
@@ -302,10 +348,10 @@ message_t ll_read_message(int fd)
         readRet = read(fd, &c, 1);
         message[size++] = c;
 
-        if (readRet == 1 && c != LL_FLAG && size % BUFFER_SIZE == 0)
+        if (readRet == 1 && c != LL_FLAG && size % conf.max_info_frame_size == 0)
         {
-            int mult = size / BUFFER_SIZE + 1;
-            message = (char*) realloc(message, mult * BUFFER_SIZE);
+            int mult = size / conf.max_info_frame_size + 1;
+            message = (char*) realloc(message, mult * conf.max_info_frame_size);
         }
     } while (readRet == 1 && c != LL_FLAG);
 
@@ -421,9 +467,6 @@ static size_t _ll_byte_destuff(char** message, size_t size)
     return size;
 }
 
-#define TIMEOUT_TIME 3
-#define RESEND_TRIES 4
-
 bool signaled = false;
 time_t alarm_subscribed;
 
@@ -434,7 +477,7 @@ void alarm_handler(int sig)
     time_t time_passed = time(NULL) - alarm_subscribed;
     ERRORF("Timeout!!!! -> %lld", (long long) time_passed);
     signaled = true;
-    alarm(TIMEOUT_TIME);
+    alarm(conf.timeout);
 }
 
 void subscribe_alarm()
@@ -443,7 +486,7 @@ void subscribe_alarm()
     sig.sa_handler = alarm_handler;
     sigaction(SIGALRM, &sig, NULL);
     signaled = false;
-    alarm(TIMEOUT_TIME);
+    alarm(conf.timeout);
     alarm_subscribed = time(NULL);
 }
 
@@ -474,7 +517,7 @@ int ll_open(const char* term, int status)
             {
                 signaled = false;
 
-                if (times_sent == RESEND_TRIES)
+                if (times_sent >= conf.retries)
                 {
                     unsubscribe_alarm();
                     ERROR("Couldn't establish connection.");
@@ -548,7 +591,7 @@ bool ll_write(int fd, const char* message_to_send, size_t message_size)
         {
             signaled = false;
 
-            if (times_sent == RESEND_TRIES)
+            if (times_sent >= conf.retries)
             {
                 unsubscribe_alarm();
                 ERROR("Couldn't send message.");
@@ -688,7 +731,7 @@ bool ll_close(int fd)
             {
                 signaled = false;
 
-                if (times_sent == RESEND_TRIES)
+                if (times_sent >= conf.retries)
                 {
                     unsubscribe_alarm();
                     ERROR("Couldn't send disconnect.");
@@ -750,7 +793,7 @@ bool ll_close(int fd)
             {
                 signaled = false;
 
-                if (times_sent == RESEND_TRIES)
+                if (times_sent >= conf.retries)
                 {
                     unsubscribe_alarm();
                     ERROR("Couldn't send disconnect.");
