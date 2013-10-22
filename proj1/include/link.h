@@ -11,10 +11,10 @@
      Suite of methods that allow the communication between two adjacent nodes (sender and receiver).
 */
 
-#define TRANSMITTER 0
-#define RECEIVER 1
+#define TRANSMITTER 0 /// Connection status for transmitter
+#define RECEIVER 1    /// Connection status for receiver
 
-/*! \brief Opens the connectio identified in a mode given as a parameter (stat).
+/*! \brief Opens the connection identified in a mode given as a parameter (stat).
  *
  * \param term connection identifier.
  * \param stat connection status (TRANSMITTER/RECEIVER).
@@ -31,7 +31,7 @@ int ll_open(const char* term, int stat);
  */
 bool ll_write(int fd, const char* message, size_t size);
 
-/*! \brief Reads a message with a size given as parameter from the connection buffer.
+/*! \brief Reads a message a link layer message.
  *
  *	\param fd file descriptor.
  *	\param message buffer where the read information will be stored.
