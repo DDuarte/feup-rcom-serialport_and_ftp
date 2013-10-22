@@ -432,7 +432,7 @@ void alarm_handler(int sig)
     if (sig != SIGALRM)
         return;
     time_t time_passed = time(NULL) - alarm_subscribed;
-    printf("Timeout!!!! -> %lld\n", (long long) time_passed);
+    ERRORF("Timeout!!!! -> %lld", (long long) time_passed);
     signaled = true;
     alarm(TIMEOUT_TIME);
 }

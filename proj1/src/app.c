@@ -1,11 +1,12 @@
-#include "app.h"
-#include "misc.h"
-#include "link.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
+
+#include "misc.h"
+#include "app.h"
+#include "link.h"
 
 #define CONTROL_FIELD_DATA 0
 #define CONTROL_FIELD_START 1
@@ -49,7 +50,7 @@ int app_receive_data_packet(int fd, int* seq_number, char** buffer, int* length)
 
     if (ctrl != CONTROL_FIELD_DATA)
     {
-        fprintf(stderr, "ERROR: Control field received (%d) is not CONTROL_FIELD_DATA", ctrl);
+        ERRORF("Control field received (%d) is not CONTROL_FIELD_DATA", ctrl);
         return -1;
     }
 
@@ -338,7 +339,7 @@ int app_receive_file(const char* term)
 
     if (ctrlStart != CONTROL_FIELD_START)
     {
-        fprintf(stderr, "ERROR: Control field received (%d) is not CONTROL_FIELD_START\n", ctrlStart);
+        ERRORF("Control field received (%d) is not CONTROL_FIELD_START", ctrlStart);
         return -1;
     }
 
@@ -370,7 +371,7 @@ int app_receive_file(const char* term)
 
     if (ctrlEnd != CONTROL_FIELD_END)
     {
-        fprintf(stderr, "ERROR: Control field received (%d) is not CONTROL_FIELD_END\n", ctrlEnd);
+        ERRORF("Control field received (%d) is not CONTROL_FIELD_END", ctrlEnd);
         return -1;
     }
 
