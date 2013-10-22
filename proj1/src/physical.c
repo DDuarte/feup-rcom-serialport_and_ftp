@@ -12,10 +12,12 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include "misc.h"
+
 #define BAUDRATE B38400
 
 phy_connection phy_open(const char* term)
-{
+{ LOG
     phy_connection conn;
     int fd;
     struct termios oldtio;
@@ -52,19 +54,19 @@ phy_connection phy_open(const char* term)
 }
 
 ssize_t phy_write(const phy_connection* conn, const char* message, size_t size)
-{
+{ LOG
     assert(conn && message);
     return write(conn->fd, message, size);
 }
 
 ssize_t phy_read(const phy_connection* conn, char* message, size_t max_size)
-{
+{ LOG
     assert(conn && message);
     return read(conn->fd, message, max_size);
 }
 
 bool phy_close(phy_connection* conn)
-{
+{ LOG
     if (!conn || conn->fd == -1) return false;
 
     if (tcsetattr(conn->fd, TCSANOW, &conn->term) != 0)

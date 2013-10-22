@@ -32,8 +32,8 @@ typedef struct
 
     union
     {
-        char r;
-        char s;
+        unsigned char r;
+        unsigned char s;
     };
 
     union
@@ -60,7 +60,7 @@ static size_t _ll_byte_stuff(char** message, size_t size);
 static size_t _ll_byte_destuff(char** message, size_t size);
 
 char ll_calculate_bcc(const char* buffer, size_t size)
-{
+{ LOG
     char bcc = 0;
     size_t i;
     for (i = 0; i < size; ++i)
@@ -70,7 +70,7 @@ char ll_calculate_bcc(const char* buffer, size_t size)
 }
 
 char * compose_command(ll_address address, ll_cntrl cntrl, int n)
-{
+{ LOG
     char * command = malloc(LL_CMD_SIZE);
     command[0] = LL_FLAG;
     command[1] = address;
@@ -93,7 +93,7 @@ char * compose_command(ll_address address, ll_cntrl cntrl, int n)
 }
 
 char* compose_message(ll_address address, const char* msg, size_t size, int ns)
-{
+{ LOG
     char* message = malloc(LL_MSG_SIZE_PARTIAL + size);
 
     message[0] = LL_FLAG;
@@ -110,7 +110,7 @@ char* compose_message(ll_address address, const char* msg, size_t size, int ns)
 }
 
 ssize_t ll_send_message(link_layer* conn, const char* message, size_t size)
-{
+{ LOG
     char* msg;
     size_t bytesWritten;
 
@@ -131,19 +131,16 @@ ssize_t ll_send_message(link_layer* conn, const char* message, size_t size)
     free(msg);
 
     return bytesWritten == size;
-
-    return -1;
 }
 
 bool ll_send_command(link_layer* conn, ll_cntrl command)
-{
-    char* cmd;
+{ LOG
     size_t bytesWritten;
     size_t messageSize = LL_CMD_SIZE;
 
     assert(conn);
 
-    cmd = compose_command(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T,
+    char* cmd = compose_command(conn->stat == TRANSMITTER ? ADDR_T_R : ADDR_R_T,
             command, conn->sequence_number);
 
     messageSize = _ll_byte_stuff(&cmd, messageSize);
@@ -161,13 +158,12 @@ bool ll_send_command(link_layer* conn, ll_cntrl command)
 #define BUFFER_SIZE 255
 
 message_t ll_read_message(link_layer* conn)
-{
+{ LOG
     message_t result;
 
     size_t size = 0;
     ssize_t readRet;
     char c;
-    char* message;
 
     assert(conn);
 
@@ -180,19 +176,16 @@ message_t ll_read_message(link_layer* conn)
 
     DEBUG_LINE();
 
-    printf("I suppose this is a LL_FLAG (0x7E): 0x%X\n", c);
-    printf("Maybe the readRet is 0: %d\n", readRet);
     if (readRet <= 0)
     {
         result.type = ERROR;
         result.error.code = IO_ERROR;
-        //free(message);
         return result;
     }
 
     DEBUG_LINE();
 
-    message = (char*) malloc(BUFFER_SIZE * sizeof(char));
+    char* message = malloc(BUFFER_SIZE * sizeof(char));
     message[0] = LL_FLAG;
     size = 1;
 
@@ -241,7 +234,7 @@ message_t ll_read_message(link_layer* conn)
 
     DEBUG_LINE();
 
-    if ( LL_IS_INFO_FRAME( GET_CTRL( message ) ))
+    if (LL_IS_INFO_FRAME(GET_CTRL(message)))
     {
         size_t msg_size = size - LL_MSG_SIZE_PARTIAL;
         char bcc2 = ll_calculate_bcc(&message[4], msg_size);
@@ -253,7 +246,6 @@ message_t ll_read_message(link_layer* conn)
         {
             result.type = ERROR;
             result.error.code = BCC2_ERROR;
-            free(message);
         }
         else
         {
@@ -261,9 +253,8 @@ message_t ll_read_message(link_layer* conn)
             result.information.message_size = msg_size;
             result.information.message = malloc(
                     result.information.message_size * sizeof(char));
-            strncpy(result.information.message, &message[4],
+            memcpy(result.information.message, &message[4],
                     result.information.message_size);
-            free(message);
         }
     }
     else
@@ -291,11 +282,12 @@ message_t ll_read_message(link_layer* conn)
 
     DEBUG_LINE();
 
+    free(message);
     return result;
 }
 
 static size_t _ll_byte_stuff(char** message, size_t size)
-{
+{ LOG
     size_t i;
     size_t newSize = size;
 
@@ -320,7 +312,7 @@ static size_t _ll_byte_stuff(char** message, size_t size)
 }
 
 static size_t _ll_byte_destuff(char** message, size_t size)
-{
+{ LOG
     size_t i;
 
     for (i = 1; i < size - 1; ++i)
@@ -345,7 +337,7 @@ bool signaled = false;
 time_t alarm_subscribed;
 
 void alarm_handler(int sig)
-{
+{ LOG
     if (sig != SIGALRM)
         return;
     time_t time_passed = time(NULL) - alarm_subscribed;
@@ -355,7 +347,7 @@ void alarm_handler(int sig)
 }
 
 void subscribe_alarm()
-{
+{ LOG
     struct sigaction sig;
     sig.sa_handler = alarm_handler;
     sigaction(SIGALRM, &sig, NULL);
@@ -365,7 +357,7 @@ void subscribe_alarm()
 }
 
 void unsubscribe_alarm()
-{
+{ LOG
     struct sigaction sig;
     sig.sa_handler = NULL;
     sigaction(SIGALRM, &sig, NULL);
@@ -373,7 +365,7 @@ void unsubscribe_alarm()
 }
 
 link_layer ll_open(const char* term, ll_status stat)
-{
+{ LOG
     link_layer ll;
 
     ll.connection = phy_open(term);
@@ -441,7 +433,7 @@ link_layer ll_open(const char* term, ll_status stat)
 
                 DEBUG("UA Sent");
 
-                LOG("Connection established");
+                DEBUG("Connection established");
 
                 ll.state = ST_TRANSFERRING;
             }
@@ -456,9 +448,9 @@ link_layer ll_open(const char* term, ll_status stat)
     return ll;
 }
 
-ssize_t ll_write(link_layer* conn, const char* message_to_send,
+bool ll_write(link_layer* conn, const char* message_to_send,
         size_t message_size)
-{
+{ LOG
     message_t message;
     int times_sent = 0;
 
@@ -515,12 +507,9 @@ ssize_t ll_write(link_layer* conn, const char* message_to_send,
 }
 
 ssize_t ll_read(link_layer* conn, char** message_received)
-{
+{ LOG
     message_t message;
     bool done = false;
-    ssize_t size = 0;
-
-    *message_received = NULL;
 
     while (!done)
     {
@@ -547,6 +536,7 @@ ssize_t ll_read(link_layer* conn, char** message_received)
                 break;
             }
             case COMMAND:
+            {
                 switch (message.command.code)
                 {
                     case SET:
@@ -556,9 +546,7 @@ ssize_t ll_read(link_layer* conn, char** message_received)
                     }
                     case UA:
                     {
-
-                        ERROR(
-                                "Received UA command: state is not disconnecting.");
+                        ERROR("Received UA command: state is not disconnecting.");
                         break;
                     }
                     case DISC:
@@ -578,21 +566,17 @@ ssize_t ll_read(link_layer* conn, char** message_received)
                         break;
                 }
                 break;
+            }
             case INFORMATION:
             {
                 if (message.s == conn->sequence_number)
                 {
-                    *message_received = realloc(*message_received,
-                            size * sizeof(char)
-                                    + message.information.message_size
-                                            * sizeof(char));
-                    strncpy(&(*message_received)[size],
-                            message.information.message,
-                            message.information.message_size);
-                    size += message.information.message_size;
+                    *message_received = malloc(message.information.message_size);
+
+                    memcpy(*message_received, message.information.message, message.information.message_size);
 
                     DEBUG("Message Received");
-                    printf("Message s = %d\n", message.s);
+                    printf("Message s = %d, size = %d\n", message.s, message.information.message_size);
                     conn->sequence_number = !message.s;
                     ll_send_command(conn, CNTRL_RR);
                     DEBUG("RR Sent");
@@ -605,11 +589,11 @@ ssize_t ll_read(link_layer* conn, char** message_received)
 
     unsubscribe_alarm();
 
-    return size;
+    return message.information.message_size;
 }
 
 bool ll_close(link_layer* conn)
-{
+{ LOG
     assert(conn);
 
     if (conn->stat == TRANSMITTER)
@@ -712,7 +696,7 @@ bool ll_close(link_layer* conn)
             if (message.type == COMMAND && message.command.code == UA)
             {
                 DEBUG("UA received");
-                LOG("Connection terminated.");
+                DEBUG("Connection terminated.");
                 ua_received = true;
             }
         }

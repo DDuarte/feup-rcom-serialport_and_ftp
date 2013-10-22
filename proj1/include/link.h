@@ -67,7 +67,6 @@ typedef enum
     ST_CONNECTING,
     ST_TRANSFERRING,
     ST_DISCONNECTING
-
 } State;
 
 
@@ -103,9 +102,9 @@ link_layer ll_open(const char* term, ll_status stat);
  * \param conn connection properties.
  * \param message information to be sent.
  * \param size message size in bytes.
- * \return positive integer on success, negative otherwise.
+ * \return true on success, false otherwise.
  */
-ssize_t ll_write(link_layer* conn, const char* message, size_t size);
+bool ll_write(link_layer* conn, const char* message, size_t size);
 
 /*! \brief Reads a message with a size given as parameter from the connection buffer.
  *

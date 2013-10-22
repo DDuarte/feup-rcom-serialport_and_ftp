@@ -1,9 +1,10 @@
 #include "app.h"
+#include "misc.h"
 #include <stdlib.h>
 #include <stdio.h>
 
 int main(int argc, char* argv[])
-{
+{ LOG
     if (argc == 2) // receiver
     {
         if (app_receive_file(argv[1]) != 0)
