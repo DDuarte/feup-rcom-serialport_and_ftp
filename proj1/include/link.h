@@ -53,5 +53,6 @@ void conf_set_timeout(int timeout);
 void conf_set_rand_seed(int rand_seed);
 void conf_bcc1_prob_error(int bcc1_prob_error);
 void conf_bcc2_prob_error(int bcc2_prob_error);
+int get_proper_baudrate(int baudrate);
 
 #endif /* LINK_H_ */
