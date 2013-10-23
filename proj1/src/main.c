@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <time.h>
+
+bool seed_set = false;
 
 void print_usage(char* program)
 {
@@ -18,6 +21,9 @@ void print_usage(char* program)
 	fprintf(stderr, " -r \t Set number of retries\n");
 	fprintf(stderr, " -m \t Set maximum information frame size\n");
 	fprintf(stderr, " -b \t Set baudrate value\n");
+    fprintf(stderr, " -bcc1e \t Set bcc1 error simulation probability (0 - 100)\n");
+    fprintf(stderr, " -bcc2e \t Set bcc2 error simulation probability (0 - 100)\n");
+    fprintf(stderr, " -bccseed \t Set bcc error simulation seed\n");
 
 }
 
@@ -26,7 +32,7 @@ int process_optional_args(int initial_idx, int argc, char** argv)
 	if (initial_idx + 1 >= argc)
 		return -1;
 
-	for(; initial_idx < argc; initial_idx += 2)
+    for (; initial_idx < argc; initial_idx += 2)
 	{
 		if (strcmp(argv[initial_idx], "-t") == 0)
 		{
@@ -45,7 +51,7 @@ int process_optional_args(int initial_idx, int argc, char** argv)
 		}
 		else if (strcmp(argv[initial_idx], "-b") == 0)
 		{
-			int baudrate = get_proper_baudrate(atoi(argv[initial_idx + 1]));
+            int baudrate = atoi(argv[initial_idx + 1]);
 
 			if (baudrate < 0)
 			{
@@ -55,6 +61,30 @@ int process_optional_args(int initial_idx, int argc, char** argv)
 
 			conf_set_baudrate(baudrate);
 		}
+        else if (strcmp(argv[initial_idx], "-bcc1e") == 0)
+        {
+            int bcc1_error_prob = atoi(argv[initial_idx + 1]);
+
+            if (bcc1_error_prob < 0 || bcc1_error_prob > 100)
+                fprintf(stderr, "Warning: invalid -bcc1e value was ignored\n");
+            else
+                conf_bcc1_prob_error(bcc1_error_prob);
+        }
+        else if (strcmp(argv[initial_idx], "-bcc2e") == 0)
+        {
+            int bcc2_error_prob = atoi(argv[initial_idx + 1]);
+
+            if (bcc2_error_prob < 0 || bcc2_error_prob > 100)
+                fprintf(stderr, "Warning: invalid -bbc2e value was ignored\n");
+            else
+                conf_bcc2_prob_error(bcc2_error_prob);
+        }
+        else if (strcmp(argv[initial_idx], "-bbcseed") == 0)
+        {
+            int bcc_seed = atoi(argv[initial_idx + 1]);
+            conf_set_rand_seed(bcc_seed);
+            seed_set = true;
+        }
 		else
 		{
 			print_usage(argv[0]);
@@ -95,10 +125,6 @@ int main(int argc, char* argv[])
 
 	is_sender = (strcmp(argv[1], "send") == 0);
 
-	//printf("number options: %d\n", opt_param_number);
-	//printf("option_start_index: %d\n", opt_start_index);
-	//printf("argc: %d\n", argc);
-
 	if (opt_start_index + 1 < argc)
 		if (process_optional_args(opt_start_index, argc, argv) < 0)
 		{
@@ -106,9 +132,11 @@ int main(int argc, char* argv[])
 			return EXIT_FAILURE;
 		}
 
+    if (!seed_set)
+        conf_set_rand_seed(time(NULL));
+
 	if (is_sender)
 	{
-		//printf("Sender: port: %s \t file: %s\n", argv[2], argv[3]);
 		if (app_send_file(argv[2], argv[3]) != 0)
 		{
 			perror("app_send_file");
@@ -117,21 +145,7 @@ int main(int argc, char* argv[])
 	}
 	else
 	{
-		int fd = open(argv[3], O_RDWR | O_CREAT | O_TRUNC, S_IRWXU | S_IRWXG | S_IRWXO);
-
-		if (fd < 0)
-		{
-			perror("opening destination file");
-			return EXIT_FAILURE;
-		}
-
-		if (dup2(fd, STDOUT_FILENO) < 0)
-		{
-			perror("duplicate file descriptors");
-			return EXIT_FAILURE;
-		}
-
-		if (app_receive_file(argv[2]) != 0)
+        if (app_receive_file(argv[2], argv[3]) != 0)
 		{
 			perror("app_receive_file");
 			return EXIT_FAILURE;

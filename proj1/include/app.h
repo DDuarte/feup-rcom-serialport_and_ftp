@@ -22,6 +22,6 @@ int app_send_file(const char* term, const char* file_name);
  * \param term serial port terminal.
  * \return 0 on success, negative integer otherwise
  */
-int app_receive_file(const char* term);
+int app_receive_file(const char* term, const char* file_name);
 
 #endif // APP_H_

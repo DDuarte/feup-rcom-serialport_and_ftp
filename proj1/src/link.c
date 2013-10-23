@@ -161,6 +161,26 @@ void conf_set_rand_seed(int rand_seed) { LOG conf.rand_seed = rand_seed; }
 void conf_bcc1_prob_error(int bcc1_prob_error) { LOG conf.bcc1_prob_error = bcc1_prob_error; }
 void conf_bcc2_prob_error(int bcc2_prob_error) { LOG conf.bcc2_prob_error = bcc2_prob_error; }
 
+typedef struct
+{
+    int num_rej;
+    int num_rr;
+    int num_info_frames;
+    int num_errors_io;
+    int num_errors_bcc1;
+    int num_errors_bcc2;
+} connection_stat_t;
+
+static connection_stat_t statistics = // default values
+{
+    .num_rej = 0,
+    .num_rr = 0,
+    .num_info_frames = 0,
+    .num_errors_io = 0,
+    .num_errors_bcc1 = 0,
+    .num_errors_bcc2 = 0
+};
+
 int get_proper_baudrate(int baudrate)
 { LOG
     switch (baudrate)
@@ -367,6 +387,12 @@ message_t ll_read_message(int fd)
 
     char bcc1 = ll_calculate_bcc(&message[1], 2);
 
+    if (_ll.status == RECEIVER && conf.bcc1_prob_error > 0)
+    {
+        int prob = (rand() % 100) + 1;
+        if (prob <= conf.bcc1_prob_error) bcc1 *= -1;
+    }
+
     if (bcc1 != message[3])
     {
         result.type = ERROR;
@@ -379,6 +405,12 @@ message_t ll_read_message(int fd)
     {
         size_t msg_size = size - LL_MSG_SIZE_PARTIAL;
         char bcc2 = ll_calculate_bcc(&message[4], msg_size);
+
+        if (_ll.status == RECEIVER && conf.bcc2_prob_error > 0)
+        {
+            int prob = (rand() % 100) + 1;
+            if (prob <= conf.bcc2_prob_error) bcc2 *= -1;
+        }
 
         result.adress = message[1];
         result.s = (message[2] >> 1) & 0x1;
@@ -504,6 +536,7 @@ void unsubscribe_alarm()
 
 int ll_open(const char* term, int status)
 { LOG
+    srand(conf.rand_seed);
     int fd = phy_open(term);
 
     if (fd < 0)

@@ -338,7 +338,7 @@ int app_send_file(const char* term, const char* file_name)
     return 0;
 }
 
-int app_receive_file(const char* term)
+int app_receive_file(const char* term, const char* file_name)
 { LOG
     // start link layer
     int fd = ll_open(term, RECEIVER);
@@ -366,6 +366,14 @@ int app_receive_file(const char* term)
     DEBUGF("File name to receive: %d", startParams[1].file_name.name);
     free(startParams[1].file_name.name);
 
+    FILE* output_file = fopen(file_name, "wb");
+    if(output_file == NULL)
+    {
+        perror("ERROR: Opening output file");
+        return -1;
+    }
+
+
     int total_size_read = 0;
     int seq_number = -1;
     while (total_size_read != startParams[0].file_size.size.w)
@@ -388,8 +396,14 @@ int app_receive_file(const char* term)
         }
 
         total_size_read += length;
-        write(STDOUT_FILENO, buffer, length);
+        fwrite(buffer, sizeof(char), length, output_file);
         free(buffer);
+    }
+
+    if (fclose(output_file) != 0)
+    {
+        perror("ERROR: Closing output file");
+        return -1;
     }
 
     int ctrlEnd;
