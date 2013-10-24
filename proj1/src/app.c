@@ -54,7 +54,7 @@ int app_receive_data_packet(int fd, int* seq_number, char** buffer, int* length)
         return -1;
     }
 
-    int seq = packet_buffer[1];
+    int seq = (unsigned char)packet_buffer[1];
     int32 size;
     size.b[0] = packet_buffer[2];
     size.b[1] = packet_buffer[3];
@@ -388,7 +388,7 @@ int app_receive_file(const char* term, const char* file_name)
             return -1;
         }
 
-        if (seq_number != 254 && seq_number_before + 1 != seq_number)
+        if (seq_number != 0 && seq_number_before + 1 != seq_number)
         {
             ERRORF("Expected sequence number %d but got %d", seq_number_before + 1, seq_number);
             free(buffer);
