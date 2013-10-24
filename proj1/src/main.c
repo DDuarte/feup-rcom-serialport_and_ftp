@@ -13,8 +13,7 @@ bool seed_set = false;
 void print_usage(char* program)
 {
 	ERROR("Usage:");
-	ERRORF("\t- %s [send | receive] <terminal_filename> <input_file | output_file> [[-t t_arg | -r r_arg | -m m_arg | -b b_arg] ... ]", program);
-	ERROR("Note: errors and other messages are printed to stderr");
+    ERRORF("\t- %s send|recv <terminal_filename> <input_file|output_file> [options]", program);
 
 	fprintf(stderr, "Configuration:\n");
 	fprintf(stderr, " -t \t Set timeout value\n");
@@ -24,7 +23,7 @@ void print_usage(char* program)
     fprintf(stderr, " -bcc1e \t Set bcc1 error simulation probability (0 - 100)\n");
     fprintf(stderr, " -bcc2e \t Set bcc2 error simulation probability (0 - 100)\n");
     fprintf(stderr, " -bccseed \t Set bcc error simulation seed\n");
-
+    fprintf(stderr, " -v \t Set verbose output\n");
 }
 
 int process_optional_args(int initial_idx, int argc, char** argv)
@@ -66,7 +65,7 @@ int process_optional_args(int initial_idx, int argc, char** argv)
             int bcc1_error_prob = atoi(argv[initial_idx + 1]);
 
             if (bcc1_error_prob < 0 || bcc1_error_prob > 100)
-                fprintf(stderr, "Warning: invalid -bcc1e value was ignored\n");
+                WARNING("invalid -bcc1e value was ignored");
             else
                 conf_bcc1_prob_error(bcc1_error_prob);
         }
@@ -75,7 +74,7 @@ int process_optional_args(int initial_idx, int argc, char** argv)
             int bcc2_error_prob = atoi(argv[initial_idx + 1]);
 
             if (bcc2_error_prob < 0 || bcc2_error_prob > 100)
-                fprintf(stderr, "Warning: invalid -bbc2e value was ignored\n");
+                WARNING("Warning: invalid -bbc2e value was ignored");
             else
                 conf_bcc2_prob_error(bcc2_error_prob);
         }
@@ -84,6 +83,15 @@ int process_optional_args(int initial_idx, int argc, char** argv)
             int bcc_seed = atoi(argv[initial_idx + 1]);
             conf_set_rand_seed(bcc_seed);
             seed_set = true;
+        }
+        else if (strcmp(argv[initial_idx], "-v") == 0)
+        {
+            int enable_verbosity = atoi(argv[initial_idx + 1]);
+
+            if (enable_verbosity != 0 && enable_verbosity != 1)
+                WARNING("invalid -v value was ignored - 0/1");
+            else
+                set_verbose_output((bool)enable_verbosity);
         }
 		else
 		{
@@ -106,7 +114,7 @@ int main(int argc, char* argv[])
 
 	int opt_param_number = argc - 1, opt_start_index = 0;
 	bool is_sender = false;
-	if (strcmp(argv[1], "send") == 0 || strcmp(argv[1], "receive") == 0)
+    if (strcmp(argv[1], "send") == 0 || strcmp(argv[1], "recv") == 0)
 	{
 		if (argc < 4)
 		{
@@ -126,11 +134,13 @@ int main(int argc, char* argv[])
 	is_sender = (strcmp(argv[1], "send") == 0);
 
 	if (opt_start_index + 1 < argc)
+    {
 		if (process_optional_args(opt_start_index, argc, argv) < 0)
 		{
 			print_usage(argv[0]);
 			return EXIT_FAILURE;
 		}
+    }
 
     if (!seed_set)
         conf_set_rand_seed(time(NULL));

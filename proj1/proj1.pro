@@ -6,7 +6,8 @@ CONFIG -= qt
 SOURCES += \
     src/app.c \
     src/link.c \
-    src/main.c
+    src/main.c \
+    src/misc.c
 
 HEADERS += \
     include/app.h \

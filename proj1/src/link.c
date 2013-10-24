@@ -568,7 +568,7 @@ int ll_open(const char* term, int status)
                 if (times_sent == 1)
                     subscribe_alarm();
 
-                DEBUG("SET sent");
+                print_message("SET sent\n");
             }
 
             message = ll_read_message(fd);
@@ -576,7 +576,7 @@ int ll_open(const char* term, int status)
             if (message.type == COMMAND && message.command.code == UA)
             {
                 _ll.state = ST_TRANSFERRING;
-                DEBUG("UA Received");
+                print_message("UA received\n");
             }
         }
 
@@ -593,16 +593,16 @@ int ll_open(const char* term, int status)
 
             if (message.type == COMMAND && message.command.code == SET)
             {
-                DEBUG("SET received");
+                print_message("SET received\n");
                 if (!ll_send_command(fd, CNTRL_UA))
                 {
                     perror("Error sending UA.");
                     return fd;
                 }
 
-                DEBUG("UA Sent");
+                print_message("UA sent\n");
 
-                DEBUG("Connection established");
+                print_message("Connection established.\n");
 
                 _ll.state = ST_TRANSFERRING;
             }
@@ -642,7 +642,7 @@ bool ll_write(int fd, const char* message_to_send, size_t message_size)
             if (times_sent == 1)
                 subscribe_alarm();
 
-            DEBUG("Message sent");
+            print_message("\nmessage sent\n");
         }
 
         message = ll_read_message(fd);
@@ -651,7 +651,7 @@ bool ll_write(int fd, const char* message_to_send, size_t message_size)
         {
             if (_ll.sequence_number != message.r)
             {
-                DEBUG("RR Received");
+                print_message("RR received\n");
                 _ll.sequence_number = message.r;
             }
             unsubscribe_alarm();
@@ -659,7 +659,7 @@ bool ll_write(int fd, const char* message_to_send, size_t message_size)
         }
         else if (message.type == COMMAND && message.command.code == REJ)
         {
-            DEBUG("REJ Received");
+            print_message("REJ received\n");
             unsubscribe_alarm();
             times_sent = 0;
         }
@@ -688,6 +688,7 @@ ssize_t ll_read(int fd, char** message_received)
                     case BCC2_ERROR:
                         _ll.sequence_number = message.s;
                         ll_send_command(fd, CNTRL_REJ);
+                        print_message("REJ sent\n");
                         break;
                     case IO_ERROR:
                         perror("Error reading message");
@@ -715,7 +716,7 @@ ssize_t ll_read(int fd, char** message_received)
                     }
                     case DISC:
                     {
-                        DEBUG("DISC received");
+                        print_message("DISC received\n");
 
                         _ll.state = ST_DISCONNECTING;
 
@@ -740,10 +741,10 @@ ssize_t ll_read(int fd, char** message_received)
                     memcpy(*message_received, message.information.message, message.information.message_size);
                     free(message.information.message);
 
-                    DEBUG("Message Received");
+                    print_message("message received\n");
                     _ll.sequence_number = !message.s;
                     ll_send_command(fd, CNTRL_RR);
-                    DEBUG("RR Sent");
+                    print_message("RR sent\n");
                     done = true;
                 }
                 break;
@@ -783,19 +784,19 @@ bool ll_close(int fd)
                 if (times_sent == 1)
                     subscribe_alarm();
 
-                DEBUG("DISC sent");
+                print_message("DISC sent\n");
             }
 
             message = ll_read_message(fd);
 
             if (message.type == COMMAND && message.command.code == DISC)
             {
-                DEBUG("DISC Received");
+                print_message("DISC received\n");
                 _ll.state = ST_DISCONNECTING;
             }
             else
             {
-                DEBUG("Resending DISC");
+                print_message("DISC re-sent\n");
             }
         }
 
@@ -806,7 +807,7 @@ bool ll_close(int fd)
             perror("Error sending UA.");
             return false;
         }
-        DEBUG("UA Sent");
+        print_message("UA sent\n");
     }
     else
     {
@@ -820,7 +821,7 @@ bool ll_close(int fd)
 
             if (message.type == COMMAND && message.command.code == DISC)
             {
-                DEBUG("DISC received");
+                print_message("DISC received\n");
                 _ll.state = ST_DISCONNECTING;
             }
         }
@@ -845,15 +846,15 @@ bool ll_close(int fd)
                 if (times_sent == 1)
                     subscribe_alarm();
 
-                DEBUG("DISC sent");
+                print_message("DISC sent\n");
             }
 
             message = ll_read_message(fd);
 
             if (message.type == COMMAND && message.command.code == UA)
             {
-                DEBUG("UA received");
-                DEBUG("Connection terminated.");
+                print_message("UA received\n");
+                print_message("Connection terminated.\n");
                 ua_received = true;
             }
         }
