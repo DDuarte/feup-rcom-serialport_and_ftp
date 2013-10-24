@@ -24,6 +24,7 @@ void print_usage(char* program)
     fprintf(stderr, " -bcc2e \t Set bcc2 error simulation probability (0 - 100)\n");
     fprintf(stderr, " -bccseed \t Set bcc error simulation seed\n");
     fprintf(stderr, " -v \t Set verbose output\n");
+    fprintf(stderr, " -csi \t Print CSI (connection statistical information)\n");
 }
 
 int process_optional_args(int initial_idx, int argc, char** argv)
@@ -92,6 +93,15 @@ int process_optional_args(int initial_idx, int argc, char** argv)
                 WARNING("invalid -v value was ignored - 0/1");
             else
                 set_verbose_output((bool)enable_verbosity);
+        }
+        else if (strcmp(argv[initial_idx], "-csi") == 0)
+        {
+            int print_stats = atoi(argv[initial_idx + 1]);
+
+            if (print_stats != 0 && print_stats != 1)
+                WARNING("invalid -s value was ignored - 0/1");
+            else
+                conf_set_print_stats(print_stats);
         }
         else
         {

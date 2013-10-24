@@ -54,7 +54,7 @@ typedef enum
 
 typedef enum
 {
-    FRAME_INFO,	/*!< information frame */
+    FRAME_INFO,    /*!< information frame */
     FRAME_SUPER,
     FRAME_NOT_NUMERED
 } ll_frame_type;
@@ -109,15 +109,15 @@ typedef struct
 } message_t;
 
 /*! \struct link_layer
- *	\brief  Link layer connection structure.
+ *    \brief  Link layer connection structure.
  *
- *	Encapsulates information about the connection established between the sender
- *	and the receiver, as several connection parameters: sequence number, timeout period and the number of transmissions.
+ *    Encapsulates information about the connection established between the sender
+ *    and the receiver, as several connection parameters: sequence number, timeout period and the number of transmissions.
  */
 typedef struct
 {
-    int fd;					/*!< serial connection file descriptor */
-    struct termios term;	/*!< definitions used by the terminal I/O interface */
+    int fd;                    /*!< serial connection file descriptor */
+    struct termios term;    /*!< definitions used by the terminal I/O interface */
     int status;             /*!< RECEIVER/TRANSMITTER status */
     State state;            /*!< current connection state */
 
@@ -140,6 +140,7 @@ typedef struct
     int rand_seed; /// seed for srand()
     int bcc1_prob_error; /// probability of bcc1 having errors (per packet) [0-100]
     int bcc2_prob_error; /// probability of bcc2 having errors (per packet) [0-100]
+    int print_stats; /// to or print or not to print, that is the question
 } config_t;
 
 static config_t conf = // default values
@@ -150,7 +151,8 @@ static config_t conf = // default values
     .timeout = 3,
     .rand_seed = 0,
     .bcc1_prob_error = 0,
-    .bcc2_prob_error = 0
+    .bcc2_prob_error = 0,
+    .print_stats = 0
 };
 
 void conf_set_baudrate(int baudrate) { LOG conf.baudrate = baudrate; }
@@ -160,25 +162,48 @@ void conf_set_timeout(int timeout) { LOG conf.timeout = timeout; }
 void conf_set_rand_seed(int rand_seed) { LOG conf.rand_seed = rand_seed; }
 void conf_bcc1_prob_error(int bcc1_prob_error) { LOG conf.bcc1_prob_error = bcc1_prob_error; }
 void conf_bcc2_prob_error(int bcc2_prob_error) { LOG conf.bcc2_prob_error = bcc2_prob_error; }
+void conf_set_print_stats(int print_stats) { LOG conf.print_stats = print_stats; }
 
 typedef struct
 {
     int num_rej;
     int num_rr;
     int num_info_frames;
-    int num_errors_io;
+    int num_timeouts;
     int num_errors_bcc1;
     int num_errors_bcc2;
+    int num_ua;
+    int num_set;
+    int num_disc_sent;
+    int num_disc_received;
 } connection_stat_t;
 
-static connection_stat_t statistics = // default values
+static connection_stat_t stats_sender = // default values
 {
     .num_rej = 0,
     .num_rr = 0,
     .num_info_frames = 0,
-    .num_errors_io = 0,
+    .num_timeouts = 0,
     .num_errors_bcc1 = 0,
-    .num_errors_bcc2 = 0
+    .num_errors_bcc2 = 0,
+    .num_ua = 0,
+    .num_set = 0,
+    .num_disc_sent = 0,
+    .num_disc_received = 0
+};
+
+static connection_stat_t stats_receiver = // default values
+{
+    .num_rej = 0,
+    .num_rr = 0,
+    .num_info_frames = 0,
+    // .num_timeouts = 0,
+    .num_errors_bcc1 = 0,
+    .num_errors_bcc2 = 0,
+    .num_ua = 0,
+    .num_set = 0,
+    .num_disc_sent = 0,
+    .num_disc_received = 0
 };
 
 int get_proper_baudrate(int baudrate)
@@ -508,6 +533,7 @@ void alarm_handler(int sig)
         return;
     time_t time_passed = time(NULL) - alarm_subscribed;
     ERRORF("Timeout!!!! -> %lld", (long long) time_passed);
+    stats_sender.num_timeouts++;
     signaled = true;
     alarm(conf.timeout);
 }
@@ -569,6 +595,7 @@ int ll_open(const char* term, int status)
                     subscribe_alarm();
 
                 print_message("SET sent\n");
+                stats_sender.num_set++;
             }
 
             message = ll_read_message(fd);
@@ -577,6 +604,7 @@ int ll_open(const char* term, int status)
             {
                 _ll.state = ST_TRANSFERRING;
                 print_message("UA received\n");
+                stats_sender.num_ua++;
             }
         }
 
@@ -594,6 +622,7 @@ int ll_open(const char* term, int status)
             if (message.type == COMMAND && message.command.code == SET)
             {
                 print_message("SET received\n");
+                stats_receiver.num_set++;
                 if (!ll_send_command(fd, CNTRL_UA))
                 {
                     perror("Error sending UA.");
@@ -601,6 +630,7 @@ int ll_open(const char* term, int status)
                 }
 
                 print_message("UA sent\n");
+                stats_receiver.num_ua++;
 
                 print_message("Connection established.\n");
 
@@ -643,6 +673,7 @@ bool ll_write(int fd, const char* message_to_send, size_t message_size)
                 subscribe_alarm();
 
             print_message("\nmessage sent\n");
+            stats_sender.num_info_frames++;
         }
 
         message = ll_read_message(fd);
@@ -652,6 +683,7 @@ bool ll_write(int fd, const char* message_to_send, size_t message_size)
             if (_ll.sequence_number != message.r)
             {
                 print_message("RR received\n");
+                stats_sender.num_rr++;
                 _ll.sequence_number = message.r;
             }
             unsubscribe_alarm();
@@ -660,6 +692,7 @@ bool ll_write(int fd, const char* message_to_send, size_t message_size)
         else if (message.type == COMMAND && message.command.code == REJ)
         {
             print_message("REJ received\n");
+            stats_sender.num_rej++;
             unsubscribe_alarm();
             times_sent = 0;
         }
@@ -689,12 +722,15 @@ ssize_t ll_read(int fd, char** message_received)
                         _ll.sequence_number = message.s;
                         ll_send_command(fd, CNTRL_REJ);
                         print_message("REJ sent\n");
+                        stats_receiver.num_rej++;
+                        stats_receiver.num_errors_bcc2++;
                         break;
                     case IO_ERROR:
                         perror("Error reading message");
                         return -1;
                     case BCC1_ERROR:
                         ERROR("Received BCC1_ERROR command in ll_read.");
+                        stats_receiver.num_errors_bcc1++;
                         break;
                 }
 
@@ -717,6 +753,7 @@ ssize_t ll_read(int fd, char** message_received)
                     case DISC:
                     {
                         print_message("DISC received\n");
+                        stats_receiver.num_disc_received++;
 
                         _ll.state = ST_DISCONNECTING;
 
@@ -742,8 +779,10 @@ ssize_t ll_read(int fd, char** message_received)
                     free(message.information.message);
 
                     print_message("message received\n");
+                    stats_receiver.num_info_frames++;
                     _ll.sequence_number = !message.s;
                     ll_send_command(fd, CNTRL_RR);
+                    stats_receiver.num_rr++;
                     print_message("RR sent\n");
                     done = true;
                 }
@@ -785,6 +824,7 @@ bool ll_close(int fd)
                     subscribe_alarm();
 
                 print_message("DISC sent\n");
+                stats_sender.num_disc_sent++;
             }
 
             message = ll_read_message(fd);
@@ -792,11 +832,12 @@ bool ll_close(int fd)
             if (message.type == COMMAND && message.command.code == DISC)
             {
                 print_message("DISC received\n");
+                stats_sender.num_disc_received++;
                 _ll.state = ST_DISCONNECTING;
             }
             else
             {
-                print_message("DISC re-sent\n");
+                print_message("(DISC re-sent)\n");
             }
         }
 
@@ -808,6 +849,7 @@ bool ll_close(int fd)
             return false;
         }
         print_message("UA sent\n");
+        stats_sender.num_ua++;
     }
     else
     {
@@ -822,6 +864,7 @@ bool ll_close(int fd)
             if (message.type == COMMAND && message.command.code == DISC)
             {
                 print_message("DISC received\n");
+                stats_receiver.num_disc_received++;
                 _ll.state = ST_DISCONNECTING;
             }
         }
@@ -847,6 +890,7 @@ bool ll_close(int fd)
                     subscribe_alarm();
 
                 print_message("DISC sent\n");
+                stats_receiver.num_disc_sent++;
             }
 
             message = ll_read_message(fd);
@@ -854,6 +898,7 @@ bool ll_close(int fd)
             if (message.type == COMMAND && message.command.code == UA)
             {
                 print_message("UA received\n");
+                stats_receiver.num_ua++;
                 print_message("Connection terminated.\n");
                 ua_received = true;
             }
@@ -861,6 +906,37 @@ bool ll_close(int fd)
     }
 
     unsubscribe_alarm();
+
+    if (conf.print_stats)
+    {
+        if (_ll.status == TRANSMITTER)
+        {
+            printf("CSI (Connection Statistical Information) - sender\n");
+            printf("  REJ \t\t - %d\n", stats_sender.num_rej);
+            printf("  RR \t\t - %d\n",  stats_sender.num_rr);
+            printf("  UA \t\t - %d\n",  stats_sender.num_ua);
+            printf("  SET \t\t - %d\n", stats_sender.num_set);
+            printf("  DISC (send) \t - %d\n", stats_sender.num_disc_sent);
+            printf("  DISC (recv) \t - %d\n", stats_sender.num_disc_received);
+            printf("  timeouts \t - %d\n",    stats_sender.num_timeouts);
+            printf("  bcc1 errors \t - %d\n", stats_sender.num_errors_bcc1);
+            printf("  bcc2 errors \t - %d\n", stats_sender.num_errors_bcc2);
+            printf("  info frames \t - %d\n", stats_sender.num_info_frames);
+        }
+        else
+        {
+            printf("CSI (Connection Statistical Information) - receiver\n");
+            printf("  REJ \t\t - %d\n", stats_receiver.num_rej);
+            printf("  RR  \t\t - %d\n", stats_receiver.num_rr);
+            printf("  UA  \t\t - %d\n", stats_receiver.num_ua);
+            printf("  SET \t\t - %d\n", stats_receiver.num_set);
+            printf("  DISC (send) \t - %d\n", stats_receiver.num_disc_sent);
+            printf("  DISC (recv) \t - %d\n", stats_receiver.num_disc_received);
+            printf("  bcc1 errors \t - %d\n", stats_receiver.num_errors_bcc1);
+            printf("  bcc2 errors \t - %d\n", stats_receiver.num_errors_bcc2);
+            printf("  info frames \t - %d\n", stats_receiver.num_info_frames);
+        }
+    }
 
     return phy_close(fd);
 }
