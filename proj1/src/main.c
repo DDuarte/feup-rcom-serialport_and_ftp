@@ -12,14 +12,14 @@ bool seed_set = false;
 
 void print_usage(char* program)
 {
-	ERROR("Usage:");
+    ERROR("Usage:");
     ERRORF("\t- %s send|recv <terminal_filename> <input_file|output_file> [options]", program);
 
-	fprintf(stderr, "Configuration:\n");
-	fprintf(stderr, " -t \t Set timeout value\n");
-	fprintf(stderr, " -r \t Set number of retries\n");
-	fprintf(stderr, " -m \t Set maximum information frame size\n");
-	fprintf(stderr, " -b \t Set baudrate value\n");
+    fprintf(stderr, "Configuration:\n");
+    fprintf(stderr, " -t \t Set timeout value\n");
+    fprintf(stderr, " -r \t Set number of retries\n");
+    fprintf(stderr, " -m \t Set maximum information frame size\n");
+    fprintf(stderr, " -b \t Set baudrate value\n");
     fprintf(stderr, " -bcc1e \t Set bcc1 error simulation probability (0 - 100)\n");
     fprintf(stderr, " -bcc2e \t Set bcc2 error simulation probability (0 - 100)\n");
     fprintf(stderr, " -bccseed \t Set bcc error simulation seed\n");
@@ -28,38 +28,38 @@ void print_usage(char* program)
 
 int process_optional_args(int initial_idx, int argc, char** argv)
 {
-	if (initial_idx + 1 >= argc)
-		return -1;
+    if (initial_idx + 1 >= argc)
+        return -1;
 
     for (; initial_idx < argc; initial_idx += 2)
-	{
-		if (strcmp(argv[initial_idx], "-t") == 0)
-		{
-			int timeout = atoi(argv[initial_idx + 1]);
-			conf_set_timeout(timeout);
-		}
-		else if (strcmp(argv[initial_idx], "-r") == 0)
-		{
-			int retries = atoi(argv[initial_idx + 1]);
-			conf_set_retries(retries);
-		}
-		else if (strcmp(argv[initial_idx], "-m") == 0)
-		{
-			int max_frame_size = atoi(argv[initial_idx + 1]);
-			conf_set_max_info_frame_size(max_frame_size);
-		}
-		else if (strcmp(argv[initial_idx], "-b") == 0)
-		{
+    {
+        if (strcmp(argv[initial_idx], "-t") == 0)
+        {
+            int timeout = atoi(argv[initial_idx + 1]);
+            conf_set_timeout(timeout);
+        }
+        else if (strcmp(argv[initial_idx], "-r") == 0)
+        {
+            int retries = atoi(argv[initial_idx + 1]);
+            conf_set_retries(retries);
+        }
+        else if (strcmp(argv[initial_idx], "-m") == 0)
+        {
+            int max_frame_size = atoi(argv[initial_idx + 1]);
+            conf_set_max_info_frame_size(max_frame_size);
+        }
+        else if (strcmp(argv[initial_idx], "-b") == 0)
+        {
             int baudrate = atoi(argv[initial_idx + 1]);
 
-			if (baudrate < 0)
-			{
-				ERROR("invalid baudrate value\n");
-				return EXIT_FAILURE;
-			}
+            if (baudrate < 0)
+            {
+                ERROR("invalid baudrate value\n");
+                return EXIT_FAILURE;
+            }
 
-			conf_set_baudrate(baudrate);
-		}
+            conf_set_baudrate(baudrate);
+        }
         else if (strcmp(argv[initial_idx], "-bcc1e") == 0)
         {
             int bcc1_error_prob = atoi(argv[initial_idx + 1]);
@@ -93,74 +93,74 @@ int process_optional_args(int initial_idx, int argc, char** argv)
             else
                 set_verbose_output((bool)enable_verbosity);
         }
-		else
-		{
-			print_usage(argv[0]);
-			return -1;
-		}
-	}
+        else
+        {
+            print_usage(argv[0]);
+            return -1;
+        }
+    }
 
-	return 0;
+    return 0;
 }
 
 int main(int argc, char* argv[])
 { LOG
 
-	if (argc < 2)
-	{
-		print_usage(argv[0]);
-		return EXIT_FAILURE;
-	}
-
-	int opt_param_number = argc - 1, opt_start_index = 0;
-	bool is_sender = false;
-    if (strcmp(argv[1], "send") == 0 || strcmp(argv[1], "recv") == 0)
-	{
-		if (argc < 4)
-		{
-			print_usage(argv[0]);
-			return EXIT_FAILURE;
-		}
-
-		opt_param_number -= 3;
-		opt_start_index = 4;
-	}
-	else
-	{
-		print_usage(argv[0]);
-		return EXIT_FAILURE;
-	}
-
-	is_sender = (strcmp(argv[1], "send") == 0);
-
-	if (opt_start_index + 1 < argc)
+    if (argc < 2)
     {
-		if (process_optional_args(opt_start_index, argc, argv) < 0)
-		{
-			print_usage(argv[0]);
-			return EXIT_FAILURE;
-		}
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    int opt_param_number = argc - 1, opt_start_index = 0;
+    bool is_sender = false;
+    if (strcmp(argv[1], "send") == 0 || strcmp(argv[1], "recv") == 0)
+    {
+        if (argc < 4)
+        {
+            print_usage(argv[0]);
+            return EXIT_FAILURE;
+        }
+
+        opt_param_number -= 3;
+        opt_start_index = 4;
+    }
+    else
+    {
+        print_usage(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    is_sender = (strcmp(argv[1], "send") == 0);
+
+    if (opt_start_index + 1 < argc)
+    {
+        if (process_optional_args(opt_start_index, argc, argv) < 0)
+        {
+            print_usage(argv[0]);
+            return EXIT_FAILURE;
+        }
     }
 
     if (!seed_set)
         conf_set_rand_seed(time(NULL));
 
-	if (is_sender)
-	{
-		if (app_send_file(argv[2], argv[3]) != 0)
-		{
-			perror("app_send_file");
-			return EXIT_FAILURE;
-		}
-	}
-	else
-	{
+    if (is_sender)
+    {
+        if (app_send_file(argv[2], argv[3]) != 0)
+        {
+            perror("app_send_file");
+            return EXIT_FAILURE;
+        }
+    }
+    else
+    {
         if (app_receive_file(argv[2], argv[3]) != 0)
-		{
-			perror("app_receive_file");
-			return EXIT_FAILURE;
-		}
-	}
+        {
+            perror("app_receive_file");
+            return EXIT_FAILURE;
+        }
+    }
 
-	return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
 }

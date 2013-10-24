@@ -33,16 +33,16 @@ bool ll_write(int fd, const char* message, size_t size);
 
 /*! \brief Reads a message a link layer message.
  *
- *	\param fd file descriptor.
- *	\param message buffer where the read information will be stored.
- *	\return positive integer on success, negative otherwise.
+ *    \param fd file descriptor.
+ *    \param message buffer where the read information will be stored.
+ *    \return positive integer on success, negative otherwise.
  */
 ssize_t ll_read(int fd, char** message);
 
 /*! \brief Closes the connection identified by conn.
  *
- *	\param fd file descriptor.
- *	\return true on sucess, false otherwise.
+ *    \param fd file descriptor.
+ *    \return true on sucess, false otherwise.
  */
 bool ll_close(int fd);
 
