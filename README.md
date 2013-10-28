@@ -32,4 +32,3 @@ sudo ./proj1 /dev/ttyS0 fileout
 sudo ./proj1 /dev/ttyS4 filein
 ```
 
-*Whatever*
