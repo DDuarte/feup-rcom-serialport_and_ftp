@@ -392,15 +392,20 @@ message_t ll_read_message(int fd)
     {
         readRet = read(fd, &c, 1);
         message[size++] = c;
-
-        if (readRet == 1 && c != LL_FLAG && size % conf.max_info_frame_size == 0)
+        
+        if (size == 2 && message[size-1] == LL_FLAG)
+	{
+	     size--;
+	     c = 0;
+	}
+        else if (readRet == 1 && c != LL_FLAG && size % conf.max_info_frame_size == 0)
         {
             int mult = size / conf.max_info_frame_size + 1;
             message = (char*) realloc(message, mult * conf.max_info_frame_size);
         }
     } while (readRet == 1 && c != LL_FLAG);
 
-    if (readRet == 0)
+    if (readRet <= 0)
     {
         result.type = ERROR;
         result.error.code = IO_ERROR;
