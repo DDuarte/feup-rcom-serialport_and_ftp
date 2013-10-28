@@ -850,6 +850,7 @@ bool ll_close(int fd)
         }
         print_message("UA sent\n");
         stats_sender.num_ua++;
+        sleep(1);
     }
     else
     {
