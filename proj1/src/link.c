@@ -925,8 +925,6 @@ bool ll_close(int fd)
             printf("  DISC (send) \t - %d\n", stats_sender.num_disc_sent);
             printf("  DISC (recv) \t - %d\n", stats_sender.num_disc_received);
             printf("  timeouts \t - %d\n",    stats_sender.num_timeouts);
-            printf("  bcc1 errors \t - %d\n", stats_sender.num_errors_bcc1);
-            printf("  bcc2 errors \t - %d\n", stats_sender.num_errors_bcc2);
             printf("  info frames \t - %d\n", stats_sender.num_info_frames);
         }
         else
@@ -938,6 +936,8 @@ bool ll_close(int fd)
             printf("  SET \t\t - %d\n", stats_receiver.num_set);
             printf("  DISC (send) \t - %d\n", stats_receiver.num_disc_sent);
             printf("  DISC (recv) \t - %d\n", stats_receiver.num_disc_received);
+            printf("  bcc1 errors \t - %d\n", stats_receiver.num_errors_bcc1);
+            printf("  bcc2 errors \t - %d\n", stats_receiver.num_errors_bcc2);
             printf("  info frames \t - %d\n", stats_receiver.num_info_frames);
         }
     }
