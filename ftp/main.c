@@ -63,7 +63,7 @@ int main(int argc, char* argv[])
         return error;
     }
 
-    const char* file_name = url.parts[url.num_parts - 1];
+    const char* file_name = url.num_parts ? url.parts[url.num_parts - 1] : "";
 
     error = ftp_retr(&ftp, file_name);
     if (error) {
