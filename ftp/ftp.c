@@ -218,6 +218,10 @@ int ftp_send_cmd(FTP *ftp, const char *cmd) {
         return error;
     }
 
+    if (str[0] == '4' || str[0] == '5') { // 4xx or 5xx
+        return str[0];
+    }
+
     return 0;
 }
 

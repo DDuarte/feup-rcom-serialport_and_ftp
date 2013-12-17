@@ -41,7 +41,15 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
 
-    error = ftp_login(&ftp, strlen(url.user) ? url.user : "anonymous", strlen(url.password) ? url.password : "anony@mo.us");
+    const char* user = strlen(url.user) ? url.user : "anonymous";
+    const char* pass = strlen(url.password) ? url.password : "anony@mo.us";
+
+    error = ftp_login(&ftp, user, pass);
+    if (error)
+    {
+        fprintf(stderr, "Could not login with user %s and pass %s\n", user, pass);
+        return EXIT_FAILURE;
+    }
 
     char path[1024] = "";
     for (int i = 0; i < url.num_parts - 1; ++i) {
