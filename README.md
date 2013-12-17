@@ -3,11 +3,7 @@ rcom-2013
 
 FEUP: Computer Networks - EIC0032 - 2013/2014
 
-Serial port "emulator":
-
-```bash
-sudo socat PTY,link=/dev/ttyS0 PTY,link=/dev/ttyS4
-```
+### Project 1: Send/receive file through serial port
 
 Usage:
 
@@ -27,8 +23,22 @@ Configuration:
 
 Example:
 
-```
-sudo ./proj1 /dev/ttyS0 fileout
-sudo ./proj1 /dev/ttyS4 filein
+```bash
+sudo socat PTY,link=/dev/ttyS0 PTY,link=/dev/ttyS4 # serial port "emulator"
+sudo ./proj1 recv /dev/ttyS0 fileout
+sudo ./proj1 send /dev/ttyS4 filein
 ```
 
+### Project 2: Simple FTP client (downloads a file)
+
+Usage:
+
+```bash
+./download ftp://[<user>:<password>@]<host>[:port]/<url-path>
+```
+
+Example:
+
+```bash
+./download ftp://ftp.fe.up.pt/welcome.msg # file is saved to current working dir with filename welcome.msg
+```
